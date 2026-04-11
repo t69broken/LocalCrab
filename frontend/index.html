@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LocalCrab</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<style>
+  :root {
+    --bg: #0d0f14; --bg2: #13161e; --bg3: #1a1d27;
+    --border: #252836; --accent: #e05c2a; --accent2: #f0873d;
+    --green: #3ddc84; --yellow: #f0c040; --red: #e05050; --blue: #4a9eff;
+    --text: #d4d8e8; --text2: #8890aa; --text3: #555a70;
+    --ralph: #a855f7; --ralph2: #c084fc;
+    --font: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Header */
+  header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 16px; height: 48px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .logo { font-size: 18px; font-weight: 700; color: #4a9eff; letter-spacing: -0.5px; }
+  .logo span { color: #82c4ff; }
+  .header-badges { display: flex; gap: 8px; margin-left: auto; }
+  .badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge.ok { background: #1a3328; color: var(--green); }
+  .badge.warn { background: #2d2510; color: var(--yellow); }
+  .badge.err { background: #2d1515; color: var(--red); }
+
+  /* Nav tabs */
+  nav { background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; gap: 0; flex-shrink: 0; }
+  .tab { padding: 10px 18px; cursor: pointer; color: var(--text2); border-bottom: 2px solid transparent; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.15s; }
+  .tab:hover { color: var(--text); background: var(--bg3); }
+  .tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
+
+  /* Layout */
+  .workspace { flex: 1; display: flex; overflow: hidden; }
+  .panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .panel-header { padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg2); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .panel-header h2 { font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+  .panel-body { flex: 1; overflow-y: auto; padding: 12px; }
+
+  /* Split view */
+  .split { display: flex; height: 100%; }
+  .split-left { width: 340px; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .split-right { flex: 1; display: flex; flex-direction: column; }
+
+  /* Chat */
+  .chat-messages { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 85%; padding: 10px 13px; border-radius: 8px; line-height: 1.5; }
+  .msg.user { background: #1e2535; border: 1px solid #2a3350; align-self: flex-end; color: var(--text); }
+  .msg.assistant { background: var(--bg3); border: 1px solid var(--border); align-self: flex-start; color: var(--text); }
+  .msg.system { background: #1a1520; border: 1px solid #2a1f35; align-self: center; color: var(--text2); font-size: 11px; text-align: center; max-width: 95%; }
+  .msg.ralph { background: #1a1030; border: 1px solid #3d1f60; align-self: flex-start; color: var(--ralph2); font-size: 11px; }
+  .msg-meta { font-size: 10px; color: var(--text3); margin-bottom: 4px; }
+  .thinking-dots { display: flex; gap: 5px; align-items: center; padding: 4px 2px; }
+  .thinking-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--accent2); display: inline-block; animation: thinking-bounce 1.2s infinite ease-in-out; }
+  .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes thinking-bounce { 0%,80%,100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+  .msg pre { background: #0a0c12; border-radius: 4px; padding: 8px; margin-top: 6px; overflow-x: auto; font-size: 12px; }
+
+  /* Chat input */
+  .chat-input-area { border-top: 1px solid var(--border); padding: 10px 12px; display: flex; gap: 8px; background: var(--bg2); flex-shrink: 0; }
+  .chat-input-area textarea { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 8px 10px; font-family: var(--font); font-size: 13px; resize: none; outline: none; line-height: 1.4; }
+  .chat-input-area textarea:focus { border-color: var(--accent); }
+  .btn { padding: 7px 14px; border-radius: 5px; border: none; cursor: pointer; font-family: var(--font); font-size: 12px; font-weight: 600; transition: all 0.15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-secondary { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
+  .btn-secondary:hover { color: var(--text); border-color: var(--accent); }
+  .btn-danger { background: #2d1515; color: var(--red); border: 1px solid #4a2020; }
+  .btn-danger:hover { background: #3d1a1a; }
+  .btn-ralph { background: #1e0f35; color: var(--ralph2); border: 1px solid #3d1f60; }
+  .btn-ralph:hover { background: #2a1545; }
+
+  /* Ralph task panel */
+  .ralph-panel { background: var(--bg2); border: 1px solid #2a1f45; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  .ralph-header { padding: 10px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2a1f45; cursor: pointer; }
+  .ralph-header:hover { background: #1a1030; }
+  .ralph-icon { font-size: 14px; }
+  .ralph-title { font-size: 12px; font-weight: 600; color: var(--ralph2); flex: 1; }
+  .ralph-status { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+  .ralph-status.running { background: #0f2a1a; color: var(--green); }
+  .ralph-status.checking { background: #1a0f30; color: var(--ralph2); animation: pulse 1.5s infinite; }
+  .ralph-status.stalled { background: #2d2510; color: var(--yellow); }
+  .ralph-status.looping { background: #2d1515; color: var(--red); }
+  .ralph-status.completed { background: #0f2a1a; color: var(--green); }
+  .ralph-status.failed { background: #2d1515; color: var(--red); }
+  .ralph-status.interrupted { background: #2d1f0a; color: var(--yellow); }
+  .ralph-body { padding: 10px 12px; }
+  .ralph-task-desc { color: var(--text2); font-size: 11px; margin-bottom: 8px; }
+  .ralph-checkins { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+  .checkin-row { background: #0d0a18; border: 1px solid #2a1f45; border-radius: 5px; padding: 7px 9px; }
+  .checkin-prompt { color: var(--ralph); font-size: 10px; margin-bottom: 3px; }
+  .checkin-response { color: var(--text); font-size: 11px; line-height: 1.4; }
+  .ralph-stats { display: flex; gap: 12px; margin-top: 8px; font-size: 10px; color: var(--text3); }
+  .ralph-stat { display: flex; flex-direction: column; gap: 2px; }
+  .ralph-stat strong { color: var(--text2); font-size: 12px; }
+  .ralph-reply { display: flex; gap: 6px; margin-top: 8px; }
+  .ralph-reply input { flex: 1; background: #0a0c12; border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; color: var(--text); font-size: 11px; font-family: inherit; }
+  .ralph-reply input:focus { outline: none; border-color: var(--ralph2); }
+  .ralph-reply button { background: #1a0f30; border: 1px solid var(--ralph2); color: var(--ralph2); border-radius: 5px; padding: 4px 10px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+  .ralph-reply button:hover { background: var(--ralph2); color: #fff; }
+
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  /* Sidebar agent list */
+  .agent-list { display: flex; flex-direction: column; gap: 4px; }
+  .agent-item { padding: 9px 11px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; transition: all 0.1s; }
+  .agent-item:hover { background: var(--bg3); }
+  .agent-item.active { background: var(--bg3); border-color: var(--accent); }
+  .agent-name { font-size: 12px; font-weight: 600; color: var(--text); }
+  .agent-meta { font-size: 10px; color: var(--text3); margin-top: 2px; }
+  .agent-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 5px; }
+
+  /* GPU widget */
+  .gpu-bar { height: 6px; background: var(--bg3); border-radius: 3px; margin-top: 5px; overflow: hidden; }
+  .gpu-fill { height: 100%; border-radius: 3px; transition: width 1s; }
+  .gpu-fill.ok { background: var(--green); }
+  .gpu-fill.warn { background: var(--yellow); }
+  .gpu-fill.crit { background: var(--red); }
+
+  /* Task submit form */
+  .task-form { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .task-form h3 { font-size: 11px; font-weight: 600; color: var(--ralph); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .form-row { margin-bottom: 8px; }
+  .form-row label { display: block; font-size: 10px; color: var(--text2); margin-bottom: 4px; text-transform: uppercase; }
+  .form-row input, .form-row textarea, .form-row select { width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 6px 9px; font-family: var(--font); font-size: 12px; outline: none; }
+  .form-row input:focus, .form-row textarea:focus, .form-row select:focus { border-color: var(--ralph); }
+  .form-row select option { background: var(--bg2); }
+
+  /* Model pills */
+  .model-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 6px; }
+  .model-name { font-weight: 600; color: var(--text); }
+  .model-stats { display: flex; gap: 12px; margin-top: 5px; font-size: 10px; color: var(--text2); }
+  .cap-bar { display: flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 10px; color: var(--text3); }
+  .cap-fill { height: 3px; border-radius: 2px; background: var(--accent); }
+
+  /* Skills & Personas grid */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .card:hover { background: var(--bg2); border-color: var(--text3); }
+  .card-title { font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .card-desc { font-size: 11px; color: var(--text2); line-height: 1.4; }
+  .card-footer { margin-top: 8px; display: flex; align-items: center; gap: 6px; }
+  .pill { font-size: 10px; padding: 2px 7px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text3); }
+  .pill.builtin { background: #0f1f2a; border-color: #1a3a50; color: var(--blue); }
+
+  /* Memory */
+  .mem-item { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 9px 11px; margin-bottom: 5px; }
+  .mem-content { color: var(--text); line-height: 1.4; }
+  .mem-meta { display: flex; gap: 10px; margin-top: 5px; font-size: 10px; color: var(--text3); }
+
+  /* Search */
+  .search-row { display: flex; gap: 6px; margin-bottom: 10px; }
+  .search-row input { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 7px 10px; font-family: var(--font); font-size: 12px; outline: none; }
+  .search-row input:focus { border-color: var(--accent); }
+
+  /* Scroll */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🦀 Local<span>Crab</span></div>
+  <div style="font-size:11px; color:var(--text3);">🦀 local • private • fast</div>
+  <div class="header-badges">
+    <span class="badge" id="badge-ollama">Ollama ···</span>
+    <span class="badge" id="badge-gpu">GPU ···</span>
+    <span class="badge" id="badge-tasks">Tasks 0</span>
+  </div>
+</header>
+
+<nav>
+  <div class="tab active" onclick="switchTab('chat')">💬 Chat</div>
+  <div class="tab" onclick="switchTab('tasks')">🔄 Tasks (Ralph)</div>
+  <div class="tab" onclick="switchTab('agents')">🤖 Agents</div>
+  <div class="tab" onclick="switchTab('models')">🧠 Models</div>
+  <div class="tab" onclick="switchTab('skills')">🛠 Skills</div>
+  <div class="tab" onclick="switchTab('personas')">🎭 Personas</div>
+  <div class="tab" onclick="switchTab('memory')">🧠 Memory</div>
+  <div class="tab" onclick="switchTab('gpu')">⚡ GPU</div>
+  <div class="tab" onclick="switchTab('tokens')">📊 Tokens</div>
+  <div class="tab" onclick="switchTab('comms')">📡 Communication</div>
+</nav>
+
+<!-- ═══════════════════════════════ CHAT ═══════════════════════════════════ -->
+<div class="workspace" id="tab-chat">
+  <div class="split">
+    <div class="split-left">
+      <div class="panel-header"><h2>🤖 Agents</h2><button class="btn btn-secondary" onclick="showNewAgentForm()" style="margin-left:auto;padding:4px 8px;font-size:10px;">+ New</button></div>
+      <div class="panel-body" id="agent-list-sidebar"></div>
+    </div>
+    <div class="split-right" style="display:flex;flex-direction:column;">
+      <div class="panel-header" style="gap:6px;flex-wrap:wrap;">
+        <h2 id="chat-agent-label">Assistant</h2>
+        <select id="chat-model-select" style="background:var(--bg3);border:1px solid var(--accent);color:var(--accent2);padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600;font-family:var(--font);min-width:160px;">
+          <option value="">— select model —</option>
+        </select>
+        <select id="chat-ctx-select" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);padding:4px 6px;border-radius:4px;font-size:11px;font-family:var(--font);" title="Context window size">
+          <option value="">ctx: auto</option>
+          <option value="2048">ctx: 2K</option>
+          <option value="4096">ctx: 4K</option>
+          <option value="8192">ctx: 8K</option>
+          <option value="16384">ctx: 16K</option>
+          <option value="32768">ctx: 32K</option>
+          <option value="65536">ctx: 64K</option>
+          <option value="131072">ctx: 128K</option>
+        </select>
+        <button class="btn btn-secondary" onclick="resetCurrentAgent()" style="margin-left:auto;padding:4px 8px;font-size:10px;" title="Start a fresh conversation (context only — history log kept)">New Session</button>
+        <button class="btn btn-danger" onclick="clearAgentHistory()" style="padding:4px 8px;font-size:10px;" title="Permanently delete all stored history for this agent">Clear History</button>
+      </div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-area">
+        <textarea id="chat-input" rows="2" placeholder="Message… (Shift+Enter for new line, Enter to send)"></textarea>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <button class="btn btn-primary" onclick="sendChat()">Send</button>
+          <button class="btn btn-ralph" onclick="sendAsTask()" title="Send as a Ralph-loop task">🔄 Task</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ TASKS ══════════════════════════════════ -->
+<div class="workspace hidden" id="tab-tasks">
+  <div class="split">
+    <div class="split-left">
+      <div class="panel-header"><h2>🔄 Submit Task</h2></div>
+      <div class="panel-body">
+        <div class="task-form">
+          <h3>🎭 Ralph Wiggum Loop</h3>
+          <div class="form-row">
+            <label>Agent</label>
+            <select id="task-agent-select"></select>
+          </div>
+          <div class="form-row">
+            <label>Task Description</label>
+            <input type="text" id="task-desc-input" placeholder="e.g. Write a Python web scraper">
+          </div>
+          <div class="form-row">
+            <label>Initial Prompt</label>
+            <textarea id="task-prompt-input" rows="4" placeholder="Detailed instructions for the agent…"></textarea>
+          </div>
+          <div class="form-row">
+            <label>Model</label>
+            <select id="task-model-select"><option value="">Loading models…</option></select>
+          </div>
+          <button class="btn btn-ralph" onclick="submitTask()" style="width:100%;margin-top:4px;">🔄 Launch with Ralph Watchdog</button>
+        </div>
+        <div style="font-size:10px;color:var(--text3);line-height:1.5;padding:0 2px;">
+          The Ralph loop fires a check-in prompt every ~12s, pokes the agent if silent for 45s, breaks repetition loops, and streams all events live.
+        </div>
+      </div>
+    </div>
+    <div class="split-right">
+      <div class="panel-header"><h2>📋 Active & Recent Jobs</h2><button class="btn btn-secondary" onclick="loadTasks()" style="margin-left:auto;padding:4px 8px;font-size:10px;">↻ Refresh</button></div>
+      <div class="panel-body" id="tasks-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ AGENTS ═════════════════════════════════ -->
+<div class="workspace hidden" id="tab-agents">
+  <div class="panel">
+    <div class="panel-header"><h2>🤖 Agents</h2><button class="btn btn-primary" onclick="showNewAgentForm()" style="margin-left:auto;padding:5px 10px;font-size:11px;">+ New Agent</button></div>
+    <div class="panel-body" id="agents-list"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ MODELS ═════════════════════════════════ -->
+<div class="workspace hidden" id="tab-models">
+  <div class="panel">
+    <div class="panel-header"><h2>🧠 Local Models</h2></div>
+    <div class="panel-body" id="models-list"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SKILLS ═════════════════════════════════ -->
+<div class="workspace hidden" id="tab-skills">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>🛠 Skills</h2>
+      <div class="search-row" style="margin:0;margin-left:auto;">
+        <input type="text" id="skill-search" placeholder="Search ClaWHub…" style="width:200px;">
+        <button class="btn btn-primary" onclick="searchSkills()" style="padding:5px 10px;">Search</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <h3 style="font-size:11px;color:var(--text2);margin-bottom:8px;text-transform:uppercase;">Installed</h3>
+      <div class="grid" id="skills-installed"></div>
+      <div id="skills-search-results" class="hidden">
+        <h3 style="font-size:11px;color:var(--text2);margin:12px 0 8px;text-transform:uppercase;">ClaWHub Results</h3>
+        <div class="grid" id="skills-results-grid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ PERSONAS ═══════════════════════════════ -->
+<div class="workspace hidden" id="tab-personas">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>🎭 Personas (SOUL.md)</h2>
+      <div class="search-row" style="margin:0;margin-left:auto;">
+        <input type="text" id="persona-search" placeholder="Search onlycrabs.ai…" style="width:200px;">
+        <button class="btn btn-primary" onclick="searchPersonas()" style="padding:5px 10px;">Search</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="grid" id="personas-list"></div>
+      <div id="personas-search-results" class="hidden">
+        <h3 style="font-size:11px;color:var(--text2);margin:12px 0 8px;text-transform:uppercase;">Registry Results</h3>
+        <div class="grid" id="personas-results-grid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ MEMORY ═════════════════════════════════ -->
+<div class="workspace hidden" id="tab-memory">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>🧠 MCP Long-Term Memory</h2>
+      <div class="search-row" style="margin:0;margin-left:auto;">
+        <input type="text" id="memory-search" placeholder="Search memories…" style="width:200px;" onkeydown="if(event.key==='Enter')searchMemory()">
+        <button class="btn btn-primary" onclick="searchMemory()" style="padding:5px 10px;">Search</button>
+        <button class="btn btn-secondary" onclick="loadMemory()" style="padding:5px 10px;">↻</button>
+        <button class="btn btn-danger" onclick="clearAllMemory()" style="padding:5px 10px;" title="Delete all memories">Clear All</button>
+      </div>
+    </div>
+    <div class="panel-body" id="memory-list"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════ TOKENS ════════════════════════════════════ -->
+<div class="workspace hidden" id="tab-tokens">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📊 Token Usage</h2>
+      <button class="btn btn-secondary" onclick="loadTokens()" style="margin-left:auto;padding:4px 8px;font-size:10px;">↻ Refresh</button>
+      <button class="btn btn-danger" onclick="resetTokens()" style="padding:4px 8px;font-size:10px;">Reset</button>
+    </div>
+    <div class="panel-body" id="tokens-panel">
+      <div style="color:var(--text3);padding:20px;">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ GPU ════════════════════════════════════ -->
+<div class="workspace hidden" id="tab-gpu">
+  <div class="panel">
+    <div class="panel-header"><h2>⚡ GPU Memory</h2><button class="btn btn-danger" onclick="optimizeGPU()" style="margin-left:auto;padding:5px 10px;font-size:11px;">🗑 Evict Idle Models</button></div>
+    <div class="panel-body" id="gpu-panel"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ COMMUNICATION ═══════════════════════════════ -->
+<div class="workspace hidden" id="tab-comms">
+  <div class="split">
+    <div class="split-left" style="width:380px;">
+      <div class="panel-header"><h2>📡 Telegram Bot</h2><span id="tg-status-badge" class="badge">···</span></div>
+      <div class="panel-body">
+        <div class="task-form">
+          <h3>🤖 Bot Configuration</h3>
+          <div class="form-row">
+            <label>Bot Token</label>
+            <div style="display:flex;gap:5px;">
+              <input type="password" id="tg-token-input" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" style="flex:1;">
+              <button class="btn btn-secondary" onclick="toggleTgTokenVis()" style="padding:5px 8px;font-size:11px;" title="Show/hide token">👁</button>
+            </div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px;">Get a token from <strong style="color:var(--accent2);">@BotFather</strong> on Telegram. Send it <code>/newbot</code>.</div>
+          </div>
+          <div class="form-row">
+            <label>Allowed User IDs</label>
+            <input type="text" id="tg-users-input" placeholder="123456789, 987654321">
+            <div style="font-size:10px;color:var(--text3);margin-top:4px;">Comma-separated Telegram user IDs. Find yours by messaging <strong style="color:var(--accent2);">@userinfobot</strong>. Leave blank to allow everyone.</div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:10px;">
+            <button class="btn btn-primary" onclick="saveTelegramConfig()" style="flex:1;">💾 Save &amp; Connect</button>
+            <button class="btn btn-danger" onclick="stopTelegramBot()" style="padding:7px 12px;" title="Disconnect bot">■ Stop</button>
+          </div>
+          <div id="tg-save-msg" style="margin-top:8px;font-size:11px;display:none;"></div>
+        </div>
+
+        <div class="task-form" style="margin-top:0;">
+          <h3>📊 Current Status</h3>
+          <div id="tg-status-detail" style="font-size:12px;color:var(--text2);line-height:1.8;">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="split-right">
+      <div class="panel-header"><h2>📖 Setup Guide</h2></div>
+      <div class="panel-body" style="max-width:620px;">
+        <div style="line-height:1.8;color:var(--text2);font-size:12px;">
+
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;">
+            <div style="font-weight:700;color:var(--text);margin-bottom:8px;font-size:13px;">Step 1 — Create a bot</div>
+            <ol style="padding-left:18px;display:flex;flex-direction:column;gap:5px;">
+              <li>Open Telegram and search for <code style="color:var(--accent2);">@BotFather</code></li>
+              <li>Send the command <code style="color:var(--accent2);">/newbot</code></li>
+              <li>Follow the prompts — choose a name and username (must end in <code>bot</code>)</li>
+              <li>BotFather will reply with your <strong style="color:var(--text);">bot token</strong></li>
+            </ol>
+          </div>
+
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;">
+            <div style="font-weight:700;color:var(--text);margin-bottom:8px;font-size:13px;">Step 2 — Find your Telegram user ID</div>
+            <ol style="padding-left:18px;display:flex;flex-direction:column;gap:5px;">
+              <li>Message <code style="color:var(--accent2);">@userinfobot</code> on Telegram</li>
+              <li>It will instantly reply with your numeric user ID</li>
+              <li>Paste it into the <strong style="color:var(--text);">Allowed User IDs</strong> field above</li>
+              <li>Add more people by separating IDs with commas</li>
+            </ol>
+          </div>
+
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;">
+            <div style="font-weight:700;color:var(--text);margin-bottom:8px;font-size:13px;">Step 3 — Connect &amp; chat</div>
+            <ol style="padding-left:18px;display:flex;flex-direction:column;gap:5px;">
+              <li>Paste the token and your user ID above, then click <strong style="color:var(--accent2);">Save &amp; Connect</strong></li>
+              <li>Open Telegram and start chatting with your bot</li>
+              <li>The bot talks to your <strong style="color:var(--text);">default agent</strong> by default</li>
+            </ol>
+          </div>
+
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;">
+            <div style="font-weight:700;color:var(--text);margin-bottom:8px;font-size:13px;">Bot commands</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              <div><code style="color:var(--accent2);">/start</code> <span style="color:var(--text3);margin-left:6px;">— greeting and help</span></div>
+              <div><code style="color:var(--accent2);">/agents</code> <span style="color:var(--text3);margin-left:6px;">— list all LocalCrab agents</span></div>
+              <div><code style="color:var(--accent2);">/agent &lt;id&gt;</code> <span style="color:var(--text3);margin-left:6px;">— switch to a specific agent</span></div>
+              <div><code style="color:var(--accent2);">/clear</code> <span style="color:var(--text3);margin-left:6px;">— reset current agent context</span></div>
+              <div><code style="color:var(--accent2);">/status</code> <span style="color:var(--text3);margin-left:6px;">— GPU and model info</span></div>
+              <div style="margin-top:4px;color:var(--text3);font-style:italic;">Any other message — chat with the active agent</div>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;padding:10px 12px;background:#1a1020;border:1px solid #3d1f60;border-radius:6px;color:var(--ralph2);font-size:11px;">
+            <strong>Persistence note:</strong> Settings are saved to <code>/app/data/comms_config.json</code> and survive container restarts. You can also set <code>TELEGRAM_BOT_TOKEN</code> and <code>TELEGRAM_ALLOWED_USERS</code> in your <code>.env</code> file as a fallback.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';  // same origin
+let currentAgentId = 'default';
+let ws = null;
+let taskWs = {};
+let allAgents = [];
+let lastAssistantDiv = null;  // track most recent assistant bubble for token annotation
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+
+function switchTab(name) {
+  document.querySelectorAll('.workspace').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.remove('hidden');
+  event.target.classList.add('active');
+  if (name === 'chat') { loadAgents(); connectWS(); }
+  if (name === 'tasks') { loadTasks(); loadAgentsForTaskForm(); loadModelsForTaskForm(); }
+  if (name === 'agents') loadAgentsFull();
+  if (name === 'models') loadModels();
+  if (name === 'skills') loadSkills();
+  if (name === 'personas') loadPersonas();
+  if (name === 'memory') loadMemory();
+  if (name === 'gpu') loadGPU();
+  if (name === 'tokens') loadTokens();
+  if (name === 'comms') loadCommsStatus();
+}
+
+// ── Status polling ────────────────────────────────────────────────────────
+
+async function pollStatus() {
+  try {
+    const r = await fetch('/health');
+    const d = await r.json();
+    const ol = document.getElementById('badge-ollama');
+    ol.textContent = 'Ollama ' + (d.ollama?.online ? '✓' : '✗');
+    ol.className = 'badge ' + (d.ollama?.online ? 'ok' : 'err');
+    const gp = document.getElementById('badge-gpu');
+    if (d.gpu?.overflow_count > 0) {
+      gp.textContent = `⚠️ VRAM OVERFLOW`;
+      gp.className = 'badge err';
+    } else {
+      gp.textContent = d.gpu?.has_gpu ? `GPU ${d.gpu.free_vram_gb}GB free` : 'CPU';
+      gp.className = 'badge ' + (d.gpu?.has_gpu ? 'ok' : 'warn');
+    }
+    document.getElementById('badge-tasks').textContent = `Tasks ${d.tasks?.running || 0}`;
+  } catch(e) {}
+}
+setInterval(pollStatus, 5000);
+pollStatus();
+
+// ── Chat ──────────────────────────────────────────────────────────────────
+
+function connectWS() {
+  if (ws && ws.readyState < 2) return;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/chat/${currentAgentId}`);
+  ws.onopen = () => console.log('[WS] Connected to agent:', currentAgentId);
+  ws.onerror = (e) => console.error('[WS] Error:', e);
+  ws.onclose = (e) => {
+    console.log('[WS] Closed:', e.code, e.reason);
+    setTimeout(connectWS, 2000);
+  };
+  ws.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'delta') {
+      appendDelta(d.content);
+    } else if (d.type === 'tool_call') {
+      showToolIndicator(d.tool, d.args);
+    } else if (d.type === 'tool_result') {
+      clearToolIndicator();
+    } else if (d.type === 'tokens') {
+      annotateTokens(d);
+    } else if (d.type === 'done') {
+      clearThinking();
+      finaliseAssistantMsg();
+    } else if (d.type === 'error') {
+      clearThinking();
+      addMessage('system', `✗ Error: ${d.message || d.error}`, 'Error');
+    }
+  };
+}
+
+let assistantBuf = null;
+let tpsEl = null;          // live t/s element shown during streaming
+let streamStartTime = null;
+let streamCharCount = 0;
+let tpsInterval = null;
+
+function appendDelta(text) {
+  clearThinking();
+  const messages = document.getElementById('chat-messages');
+  if (!assistantBuf) {
+    assistantBuf = document.createElement('div');
+    assistantBuf.className = 'msg assistant';
+    messages.appendChild(assistantBuf);
+    lastAssistantDiv = assistantBuf;
+    streamStartTime = performance.now();
+    streamCharCount = 0;
+    // Create live t/s badge inside the bubble
+    tpsEl = document.createElement('span');
+    tpsEl.style.cssText = 'display:inline-block;font-size:10px;color:var(--text3);margin-left:6px;vertical-align:middle;opacity:0.7;';
+    assistantBuf.appendChild(tpsEl);
+    // Update live t/s every 500ms
+    tpsInterval = setInterval(() => {
+      if (!streamStartTime) return;
+      const elapsed = (performance.now() - streamStartTime) / 1000;
+      const approxTps = elapsed > 0.2 ? (streamCharCount / 4 / elapsed).toFixed(1) : '…';
+      if (tpsEl) tpsEl.textContent = `⚡ ${approxTps} t/s`;
+    }, 400);
+  }
+  // Insert text before the tpsEl badge
+  assistantBuf.insertBefore(document.createTextNode(text), tpsEl);
+  streamCharCount += text.length;
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function finaliseAssistantMsg() {
+  clearToolIndicator();
+  clearInterval(tpsInterval);
+  tpsInterval = null;
+  if (tpsEl) { tpsEl.remove(); tpsEl = null; }
+  streamStartTime = null;
+  if (assistantBuf) {
+    const text = assistantBuf.textContent;
+    const ts = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    assistantBuf.innerHTML =
+      `<div class="msg-meta">${ts}</div>` +
+      text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+        `<pre><code>${code.replace(/</g,'&lt;')}</code></pre>`)
+      .replace(/\n/g, '<br>');
+    assistantBuf = null;
+  }
+}
+
+let thinkingEl = null;
+
+function showThinking() {
+  clearThinking();
+  const messages = document.getElementById('chat-messages');
+  thinkingEl = document.createElement('div');
+  thinkingEl.className = 'msg assistant';
+  thinkingEl.innerHTML = '<div class="thinking-dots"><span></span><span></span><span></span></div>';
+  messages.appendChild(thinkingEl);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function clearThinking() {
+  if (thinkingEl) { thinkingEl.remove(); thinkingEl = null; }
+}
+
+let toolIndicatorEl = null;
+
+function showToolIndicator(tool, args) {
+  const messages = document.getElementById('chat-messages');
+  if (toolIndicatorEl) toolIndicatorEl.remove();
+  toolIndicatorEl = document.createElement('div');
+  toolIndicatorEl.className = 'msg system';
+  toolIndicatorEl.style.cssText = 'font-size:11px;animation:pulse 1.2s infinite;';
+  const argStr = Object.entries(args || {}).map(([k,v]) => `${k}: ${String(v).substring(0,40)}`).join(', ');
+  toolIndicatorEl.textContent = `🔧 ${tool}(${argStr})`;
+  messages.appendChild(toolIndicatorEl);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function clearToolIndicator() {
+  if (toolIndicatorEl) { toolIndicatorEl.remove(); toolIndicatorEl = null; }
+}
+
+function annotateTokens(d) {
+  const target = lastAssistantDiv;
+  if (!target) return;
+  const meta = document.createElement('div');
+  meta.style.cssText = 'font-size:10px;color:var(--text3);margin-top:5px;text-align:right;';
+  const total = (d.output_tokens || 0) + (d.input_tokens || 0);
+  const tps = d.tokens_per_second != null ? ` · ⚡ avg ${d.tokens_per_second} t/s` : '';
+  meta.textContent = `↑${d.input_tokens || 0} ↓${d.output_tokens || 0} (${total} tokens)${tps}`;
+  target.appendChild(meta);
+}
+
+function addMessage(role, content, meta='') {
+  const messages = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const now = new Date();
+  const ts = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const metaLine = [meta, ts].filter(Boolean).join(' · ');
+  div.innerHTML = `<div class="msg-meta">${metaLine}</div>`;
+  div.innerHTML += content.replace(/</g,'&lt;').replace(/\n/g,'<br>');
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const model = document.getElementById('chat-model-select').value;
+  if (!model) {
+    addMessage('system', '⚠ Select a model before chatting — use the dropdown in the header.', 'No model');
+    return;
+  }
+
+  const ctxVal = document.getElementById('chat-ctx-select').value;
+  input.value = '';
+  addMessage('user', text);
+  showThinking();
+
+  if (ws && ws.readyState === 1) {
+    const payload = {
+      messages: [{role:'user', content:text}],
+      model: model,
+    };
+    if (ctxVal) payload.num_ctx = parseInt(ctxVal);
+    ws.send(JSON.stringify(payload));
+  } else {
+    clearThinking();
+    addMessage('system', '⚠ Reconnecting…', 'Connection');
+    connectWS();
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'chat-input' && e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+});
+
+// ── Send as Ralph task ────────────────────────────────────────────────────
+
+function sendAsTask() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  // Pre-fill task form with the prompt text
+  const descEl   = document.getElementById('task-desc-input');
+  const promptEl = document.getElementById('task-prompt-input');
+  if (descEl)   descEl.value   = text.substring(0, 80);
+  if (promptEl) promptEl.value = text;
+
+  // Clear chat input and switch to task tab for review
+  input.value = '';
+  switchTab('tasks');
+
+  // Focus the description field so user can refine before launching
+  setTimeout(() => descEl && descEl.focus(), 50);
+}
+
+// ── Agents sidebar ────────────────────────────────────────────────────────
+
+async function loadAgents() {
+  const r = await fetch('/agents');
+  allAgents = await r.json();
+  const el = document.getElementById('agent-list-sidebar');
+  el.innerHTML = '';
+  allAgents.forEach(a => {
+    const div = document.createElement('div');
+    div.className = 'agent-item' + (a.agent_id === currentAgentId ? ' active' : '');
+    div.innerHTML = `<span class="agent-dot"></span><span class="agent-name">${a.name}</span><div class="agent-meta">${a.persona || 'default persona'} · ${a.message_count} msgs</div>`;
+    div.onclick = () => selectAgent(a.agent_id, a.name);
+    el.appendChild(div);
+  });
+}
+
+function selectAgent(id, name) {
+  currentAgentId = id;
+  document.getElementById('chat-agent-label').textContent = name;
+  document.getElementById('chat-messages').innerHTML = '';
+  connectWS();
+  loadAgents();
+  loadChatHistory(id);
+}
+
+async function loadChatHistory(agentId) {
+  try {
+    const r = await fetch(`/history/${agentId}?limit=60`);
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!data.messages || data.messages.length === 0) return;
+    const container = document.getElementById('chat-messages');
+    const divider = document.createElement('div');
+    divider.style.cssText = 'text-align:center;color:var(--text3);font-size:11px;padding:6px 0;border-top:1px solid var(--border);margin:4px 0;';
+    divider.textContent = `\u2014 ${data.messages.length} previous messages \u2014`;
+    container.appendChild(divider);
+    data.messages.forEach(m => addMessage(m.role, m.content));
+  } catch (e) {
+    console.warn('Could not load chat history:', e);
+  }
+}
+
+async function resetCurrentAgent() {
+  await fetch(`/agents/${currentAgentId}/reset`, {method:'POST'});
+  document.getElementById('chat-messages').innerHTML = '';
+  addMessage('system', '✦ New session started. History log preserved — model context is fresh.');
+}
+
+async function clearAgentHistory() {
+  if (!confirm('Permanently delete all stored history for this agent? This cannot be undone.')) return;
+  await fetch(`/history/${currentAgentId}`, {method:'DELETE'});
+  document.getElementById('chat-messages').innerHTML = '';
+  addMessage('system', '🗑 History cleared. Starting completely fresh.');
+}
+
+let agentFormModal = null;
+let selectedPersonaSlug = null;
+
+function showNewAgentForm() {
+  // Create modal if it doesn't exist
+  if (!agentFormModal) {
+    agentFormModal = document.createElement('div');
+    agentFormModal.id = 'agent-form-modal';
+    agentFormModal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:1000;display:flex;align-items:center;justify-content:center;';
+    document.body.appendChild(agentFormModal);
+  }
+  
+  agentFormModal.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;width:450px;max-height:80vh;overflow-y:auto;">
+      <h3 style="margin-bottom:16px;color:var(--text);">🤖 Create New Agent</h3>
+      <div class="form-row">
+        <label>Agent Name</label>
+        <input type="text" id="new-agent-name" placeholder="e.g. CodeHelper" style="width:100%;">
+      </div>
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <label style="font-size:10px;color:var(--text2);text-transform:uppercase;display:block;">Persona</label>
+          <span id="selected-persona-display" style="font-size:10px;color:var(--text3);">default</span>
+        </div>
+        <div class="search-row" style="margin:0;">
+          <input type="text" id="persona-search-input" placeholder="Search installed personas or ClaWHub..." style="flex:1;">
+          <button class="btn btn-secondary" onclick="searchPersonasInForm()" style="padding:5px 10px;">Search</button>
+        </div>
+      </div>
+      <div id="persona-list-in-form" style="max-height:200px;overflow-y:auto;margin-bottom:12px;">
+        <div style="color:var(--text3);font-size:11px;padding:8px;">Loading personas...</div>
+      </div>
+      <div id="persona-search-results-form" class="hidden" style="margin-bottom:12px;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:6px;">ClaWHub Results</div>
+        <div id="persona-search-grid-form" style="max-height:150px;overflow-y:auto;"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-secondary" onclick="closeAgentForm()">Cancel</button>
+        <button class="btn btn-primary" onclick="createAgentFromForm()">Create Agent</button>
+      </div>
+    </div>
+  `;
+  
+  agentFormModal.style.display = 'flex';
+  selectedPersonaSlug = null;
+  
+  // Load installed personas
+  loadPersonasInForm();
+}
+
+function closeAgentForm() {
+  if (agentFormModal) agentFormModal.style.display = 'none';
+}
+
+async function loadPersonasInForm() {
+  const r = await fetch('/personas');
+  const personas = await r.json();
+  const el = document.getElementById('persona-list-in-form');
+  el.innerHTML = `
+    <div style="margin-bottom:6px;">
+      <div class="card" style="cursor:pointer;padding:8px;margin-bottom:4px;${!selectedPersonaSlug ? 'border-color:var(--accent);' : ''}" onclick="selectPersonaInForm(null)">
+        <span style="color:var(--text);">🎭 default</span>
+        <span style="color:var(--text3);font-size:10px;margin-left:8px;">built-in</span>
+      </div>
+    </div>
+    ${personas.map(p => `
+      <div class="card" style="cursor:pointer;padding:8px;margin-bottom:4px;${selectedPersonaSlug === p.slug ? 'border-color:var(--accent);' : ''}" onclick="selectPersonaInForm('${p.slug}')">
+        <span style="color:var(--text);">🎭 ${p.name}</span>
+        <span style="color:var(--text3);font-size:10px;margin-left:8px;">${p.builtin ? 'built-in' : 'installed'}</span>
+      </div>
+    `).join('')}
+  `;
+}
+
+function selectPersonaInForm(slug) {
+  selectedPersonaSlug = slug;
+  document.getElementById('selected-persona-display').textContent = slug || 'default';
+  // Re-render to show selection
+  loadPersonasInForm();
+}
+
+async function searchPersonasInForm() {
+  const q = document.getElementById('persona-search-input').value.trim();
+  if (!q) return loadPersonasInForm();
+  
+  const r = await fetch(`/personas/search?q=${encodeURIComponent(q)}`);
+  const results = await r.json();
+  
+  const container = document.getElementById('persona-search-results-form');
+  const grid = document.getElementById('persona-search-grid-form');
+  container.classList.remove('hidden');
+  
+  if (!results.length) {
+    grid.innerHTML = '<div style="color:var(--text3);font-size:11px;padding:8px;">No results found on ClaWHub</div>';
+    return;
+  }
+  
+  grid.innerHTML = results.map(p => `
+    <div class="card" style="padding:8px;margin-bottom:6px;cursor:pointer;" onclick="installAndSelectPersona('${p.slug}', '${p.name || p.slug}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <span style="color:var(--text);font-weight:600;">🎭 ${p.name || p.slug}</span>
+          <span style="color:var(--text3);font-size:10px;margin-left:6px;">ClaWHub</span>
+        </div>
+        <button class="btn btn-primary" style="padding:3px 8px;font-size:10px;">Install & Select</button>
+      </div>
+      <div style="color:var(--text2);font-size:10px;margin-top:4px;">${p.description || ''}</div>
+    </div>
+  `).join('');
+}
+
+async function installAndSelectPersona(slug, name) {
+  const r = await fetch(`/personas/install/${slug}`, {method: 'POST'});
+  const d = await r.json();
+  if (d.status === 'ok') {
+    selectedPersonaSlug = slug;
+    document.getElementById('selected-persona-display').textContent = name;
+    await loadPersonasInForm();
+    // Highlight the newly installed persona
+    document.getElementById('persona-search-results-form').classList.add('hidden');
+  } else {
+    alert('Failed to install: ' + (d.error || 'unknown error'));
+  }
+}
+
+async function createAgentFromForm() {
+  const name = document.getElementById('new-agent-name').value.trim();
+  if (!name) {
+    alert('Please enter an agent name');
+    return;
+  }
+  
+  const r = await fetch('/agents', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name, persona_slug: selectedPersonaSlug, skills: []})
+  });
+  
+  if (r.ok) {
+    closeAgentForm();
+    loadAgents();
+    loadAgentsFull();
+  } else {
+    const err = await r.json();
+    alert('Error creating agent: ' + (err.detail || 'unknown error'));
+  }
+}
+
+// ── Tasks (Ralph loop) ────────────────────────────────────────────────────
+
+async function loadTasks() {
+  const r = await fetch('/tasks');
+  const jobs = await r.json();
+  const el = document.getElementById('tasks-list');
+  el.innerHTML = '';
+  if (!jobs.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:20px;text-align:center;">No tasks yet. Submit one on the left.</div>';
+    return;
+  }
+  jobs.reverse().forEach(j => el.appendChild(buildRalphCard(j)));
+}
+
+function buildRalphCard(job) {
+  const card = document.createElement('div');
+  card.className = 'ralph-panel';
+  card.id = `job-${job.job_id}`;
+  const elapsed = job.ended_at ? ((job.ended_at - job.started_at)||0).toFixed(1)+'s' : 'running…';
+  card.innerHTML = `
+    <div class="ralph-header" onclick="toggleRalphCard('${job.job_id}')">
+      <span class="ralph-icon">🔄</span>
+      <span class="ralph-title">${job.task || 'Task'}</span>
+      <span class="ralph-status ${job.status}" id="status-${job.job_id}">${job.status}</span>
+      <button class="btn btn-danger" onclick="event.stopPropagation();cancelJob('${job.job_id}')" style="padding:2px 6px;font-size:10px;${job.status==='completed'||job.status==='failed'?'display:none':''}">✕</button>
+    </div>
+    <div class="ralph-body" id="body-${job.job_id}">
+      <div class="ralph-task-desc">Agent: ${job.agent_id} · Model: ${job.model_used||'auto'} · ${elapsed}</div>
+      ${job.prompt ? `<details style="margin-bottom:6px;"><summary style="color:var(--text3);font-size:10px;cursor:pointer;user-select:none;list-style:none;padding:2px 0;">&#9654; View prompt</summary><div style="margin-top:4px;padding:6px 8px;background:#0a0c12;border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--text2);white-space:pre-wrap;max-height:120px;overflow-y:auto;">${job.prompt.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div></details>` : ''}
+      <div id="output-${job.job_id}" style="display:none;background:#0a0c12;border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:8px;max-height:300px;overflow-y:auto;font-size:11px;line-height:1.5;white-space:pre-wrap;color:var(--text);"></div>
+      <div class="ralph-checkins" id="checkins-${job.job_id}"></div>
+      <div class="ralph-stats">
+        <div class="ralph-stat"><strong id="pokes-${job.job_id}">${job.poke_count||0}</strong>pokes</div>
+        <div class="ralph-stat"><strong id="checkin-count-${job.job_id}">${job.check_ins||0}</strong>check-ins</div>
+        <div class="ralph-stat"><strong id="tokens-${job.job_id}">${job.tokens_out||0}</strong>tokens</div>
+        <div class="ralph-stat"><strong id="step-${job.job_id}">${job.step||0}</strong>steps</div>
+      </div>
+      <div class="ralph-reply" id="reply-${job.job_id}" style="${['completed','failed','cancelled','interrupted'].includes(job.status)?'display:none':''}">
+        <input type="text" id="reply-input-${job.job_id}" placeholder="Reply to agent…" onkeydown="if(event.key==='Enter')sendJobReply('${job.job_id}')">
+        <button onclick="sendJobReply('${job.job_id}')">Send</button>
+      </div>
+    </div>`;
+  connectJobWS(job.job_id);
+  return card;
+}
+
+function toggleRalphCard(jobId) {
+  const body = document.getElementById(`body-${jobId}`);
+  body.style.display = body.style.display === 'none' ? '' : 'none';
+}
+
+function connectJobWS(jobId) {
+  if (taskWs[jobId]) return;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/tasks/${jobId}`);
+  taskWs[jobId] = ws;
+  ws.onmessage = (e) => {
+    const ev = JSON.parse(e.data);
+    handleJobEvent(jobId, ev);
+  };
+  ws.onclose = () => { delete taskWs[jobId]; };
+}
+
+function handleJobEvent(jobId, ev) {
+  const statusEl = document.getElementById(`status-${jobId}`);
+  if (statusEl && ev.status) {
+    statusEl.textContent = ev.status;
+    statusEl.className = `ralph-status ${ev.status}`;
+  }
+
+  // Show output for streaming deltas
+  if (ev.type === 'delta' && ev.content) {
+    const out = document.getElementById(`output-${jobId}`);
+    if (out) { out.style.display = ''; out.textContent += ev.content; out.scrollTop = out.scrollHeight; }
+  }
+
+  // Show result on finished event (live completion) OR state event (catch-up for already-done jobs)
+  if ((ev.type === 'finished' || ev.type === 'state') && (ev.result || ev.error)) {
+    const out = document.getElementById(`output-${jobId}`);
+    if (out && !out.textContent.trim()) {
+      out.style.display = '';
+      if (ev.result) {
+        out.textContent = ev.result;
+      } else if (ev.error) {
+        out.style.color = 'var(--red)';
+        out.textContent = '⚠ ' + ev.error;
+      }
+      out.scrollTop = out.scrollHeight;
+    }
+  }
+
+  if (ev.type === 'checkin_response' || ev.type === 'poke_response') {
+    addCheckin(jobId, ev.prompt || '(status check)', ev.response, ev.type === 'poke_response' ? '⚡ poke' : '🔄 check-in');
+    const cnt = document.getElementById(`checkin-count-${jobId}`);
+    if (cnt) cnt.textContent = parseInt(cnt.textContent||'0') + 1;
+  }
+  if (ev.type === 'stall') addCheckin(jobId, '⚠️ Stall detected', `Silent for ${ev.silence}s — poking agent`, 'stall');
+  if (ev.type === 'loop_break') addCheckin(jobId, '🔁 Loop detected', ev.prompt, 'loop');
+  if (ev.type === 'user_reply') addCheckin(jobId, '💬 You said', ev.message, 'user');
+  if (ev.type === 'user_reply_response') addCheckin(jobId, '🤖 Agent reply', ev.response, 'agent');
+  if (ev.poke_count !== undefined) { const el = document.getElementById(`pokes-${jobId}`); if(el) el.textContent = ev.poke_count; }
+  if (ev.tokens !== undefined) { const el = document.getElementById(`tokens-${jobId}`); if(el) el.textContent = ev.tokens; }
+  if (ev.step !== undefined) { const el = document.getElementById(`step-${jobId}`); if(el) el.textContent = ev.step; }
+  if (ev.type === 'finished' || ev.type === 'escalated') {
+    const replyBox = document.getElementById(`reply-${jobId}`);
+    if (replyBox) replyBox.style.display = 'none';
+    pollStatus();
+    if (taskWs[jobId]) { taskWs[jobId].close(); delete taskWs[jobId]; }
+  }
+}
+
+async function sendJobReply(jobId) {
+  const input = document.getElementById(`reply-input-${jobId}`);
+  if (!input) return;
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  try {
+    const resp = await fetch(`/tasks/${jobId}/reply`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: msg}),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      addCheckin(jobId, '⚠️ Send failed', err.detail || resp.statusText, 'error');
+    }
+  } catch(e) {
+    addCheckin(jobId, '⚠️ Send failed', String(e), 'error');
+  }
+}
+
+function addCheckin(jobId, prompt, response, label) {
+  const container = document.getElementById(`checkins-${jobId}`);
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'checkin-row';
+  div.innerHTML = `<div class="checkin-prompt">${label}: ${prompt}</div><div class="checkin-response">${(response||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+async function submitTask() {
+  const agentId = document.getElementById('task-agent-select').value;
+  const task = document.getElementById('task-desc-input').value.trim();
+  const prompt = document.getElementById('task-prompt-input').value.trim();
+  const model = document.getElementById('task-model-select').value || undefined;
+  if (!task || !prompt) return alert('Fill in task description and prompt');
+  if (!model) return alert('Select a model');
+  const r = await fetch('/tasks', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({agent_id: agentId, task, messages:[{role:'user',content:prompt}], model})
+  });
+  const d = await r.json();
+  document.getElementById('task-desc-input').value = '';
+  document.getElementById('task-prompt-input').value = '';
+  const el = document.getElementById('tasks-list');
+  const card = buildRalphCard(d);
+  el.insertBefore(card, el.firstChild);
+}
+
+async function cancelJob(jobId) {
+  await fetch(`/tasks/${jobId}`, {method:'DELETE'});
+  const statusEl = document.getElementById(`status-${jobId}`);
+  if (statusEl) { statusEl.textContent = 'cancelled'; statusEl.className = 'ralph-status failed'; }
+}
+
+async function loadAgentsForTaskForm() {
+  const r = await fetch('/agents');
+  const agents = await r.json();
+  const sel = document.getElementById('task-agent-select');
+  sel.innerHTML = agents.map(a => `<option value="${a.agent_id}">${a.name}</option>`).join('');
+}
+
+async function loadModelsForTaskForm() {
+  const r = await fetch('/models');
+  const models = await r.json();
+  const sel = document.getElementById('task-model-select');
+  if (!models.length) {
+    sel.innerHTML = '<option value="">No models available</option>';
+    return;
+  }
+  sel.innerHTML = models.map(m =>
+    `<option value="${m.name}">${m.name} (${m.size_gb}GB)</option>`
+  ).join('');
+}
+
+// ── Models ────────────────────────────────────────────────────────
+
+async function loadChatModels() {
+  const r = await fetch('/models');
+  const models = await r.json();
+  const sel = document.getElementById('chat-model-select');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— select model —</option>' +
+    models.map(m => `<option value="${m.name}">${m.name} (${m.size_gb}GB)</option>`).join('');
+  if (current && models.find(m => m.name === current)) sel.value = current;
+}
+
+async function loadModels() {
+  const r = await fetch('/models');
+  const models = await r.json();
+  const el = document.getElementById('models-list');
+  el.innerHTML = '';
+  if (!models.length) {
+    el.innerHTML = '<div style="color:var(--text3);padding:20px;">No models pulled yet. Run: <code>docker exec localclaw-ollama ollama pull llama3.2</code></div>';
+    return;
+  }
+
+  const note = document.createElement('div');
+  note.style.cssText = 'margin-bottom:12px;padding:8px 10px;background:var(--bg3);border-radius:6px;border:1px solid var(--border);font-size:11px;color:var(--text2);';
+  note.textContent = 'Click "Use" to set a model as active in the chat header. Context size can also be forced there or per-message.';
+  el.appendChild(note);
+
+  models.forEach(m => {
+    const caps = m.capabilities || {};
+    const bars = Object.entries(caps).map(([k, v]) =>
+      `<div class="cap-bar"><span style="width:60px;color:var(--text3)">${k}</span><div style="flex:1;background:var(--bg);height:3px;border-radius:2px;"><div class="cap-fill" style="width:${v*10}%"></div></div><span>${v}/10</span></div>`
+    ).join('');
+
+    const div = document.createElement('div');
+    div.className = 'model-card';
+    div.id = `model-${m.name.replace(/[:.]/g, '-')}`;
+    div.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div class="model-name">${m.name}</div>
+        <button class="btn btn-primary" onclick="setChatModel('${m.name}')" style="padding:3px 10px;font-size:10px;">Use</button>
+      </div>
+      <div class="model-stats"><span>💾 ${m.size_gb}GB</span><span>⚡ ~${m.vram_estimate_gb}GB VRAM</span></div>
+      ${bars}
+    `;
+    el.appendChild(div);
+  });
+}
+
+function setChatModel(modelName) {
+  const sel = document.getElementById('chat-model-select');
+  if (sel) {
+    sel.value = modelName;
+    // If option not found (chat models not loaded yet), add it
+    if (!sel.value) {
+      const opt = document.createElement('option');
+      opt.value = modelName;
+      opt.textContent = modelName;
+      sel.appendChild(opt);
+      sel.value = modelName;
+    }
+  }
+  // Visually highlight the selected card
+  document.querySelectorAll('.model-card').forEach(c => c.style.borderColor = 'var(--border)');
+  const card = document.getElementById(`model-${modelName.replace(/[:.]/g, '-')}`);
+  if (card) card.style.borderColor = 'var(--accent)';
+  addMessage('system', `✓ Model set to ${modelName} — switch to Chat tab to start chatting.`);
+}
+
+// ── Skills ────────────────────────────────────────────────────────────────
+
+async function loadSkills() {
+  const r = await fetch('/skills');
+  const skills = await r.json();
+  const el = document.getElementById('skills-installed');
+  el.innerHTML = skills.map(s => `
+    <div class="card">
+      <div class="card-title">${s.name}</div>
+      <div class="card-desc">${s.description}</div>
+      <div class="card-footer">
+        <span class="pill ${s.builtin?'builtin':''}">${s.builtin?'built-in':'installed'}</span>
+        <span class="pill">v${s.version}</span>
+        ${!s.builtin ? `<button class="btn btn-danger" onclick="uninstallSkill('${s.slug}')" style="padding:2px 6px;font-size:10px;margin-left:auto;">✕</button>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+async function searchSkills() {
+  const q = document.getElementById('skill-search').value.trim();
+  if (!q) return;
+  const r = await fetch(`/skills/search?q=${encodeURIComponent(q)}`);
+  const results = await r.json();
+  const grid = document.getElementById('skills-results-grid');
+  const container = document.getElementById('skills-search-results');
+  container.classList.remove('hidden');
+  grid.innerHTML = results.map(s => `
+    <div class="card">
+      <div class="card-title">${s.name || s.slug}</div>
+      <div class="card-desc">${s.description || ''}</div>
+      <div class="card-footer">
+        <span class="pill">ClaWHub</span>
+        <button class="btn btn-primary" onclick="installSkill('${s.slug}')" style="margin-left:auto;padding:3px 8px;font-size:10px;">Install</button>
+      </div>
+    </div>`).join('') || '<div style="color:var(--text3)">No results</div>';
+}
+
+async function installSkill(slug) {
+  const r = await fetch('/skills/install', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug})});
+  const d = await r.json();
+  if (d.status === 'ok') { loadSkills(); alert(`✓ Installed: ${slug}`); }
+  else alert(`Error: ${d.error}`);
+}
+
+async function uninstallSkill(slug) {
+  if (!confirm(`Uninstall ${slug}?`)) return;
+  await fetch(`/skills/${slug}`, {method:'DELETE'});
+  loadSkills();
+}
+
+// ── Personas ──────────────────────────────────────────────────────────────
+
+async function loadPersonas() {
+  const r = await fetch('/personas');
+  const personas = await r.json();
+  document.getElementById('personas-list').innerHTML = personas.map(p => `
+    <div class="card">
+      <div class="card-title">🎭 ${p.name}</div>
+      <div class="card-desc">${p.description}</div>
+      <div class="card-footer"><span class="pill ${p.builtin?'builtin':''}">${p.builtin?'built-in':'installed'}</span></div>
+    </div>`).join('');
+}
+
+async function searchPersonas() {
+  const q = document.getElementById('persona-search').value.trim();
+  if (!q) return;
+  const r = await fetch(`/personas/search?q=${encodeURIComponent(q)}`);
+  const results = await r.json();
+  const grid = document.getElementById('personas-results-grid');
+  document.getElementById('personas-search-results').classList.remove('hidden');
+  grid.innerHTML = results.map(p => `
+    <div class="card">
+      <div class="card-title">🎭 ${p.name || p.slug}</div>
+      <div class="card-desc">${p.description || ''}</div>
+      <div class="card-footer">
+        <button class="btn btn-primary" onclick="installPersona('${p.slug}')" style="margin-left:auto;padding:3px 8px;font-size:10px;">Install</button>
+      </div>
+    </div>`).join('') || '<div style="color:var(--text3)">No results</div>';
+}
+
+async function installPersona(slug) {
+  await fetch(`/personas/install/${slug}`, {method:'POST'});
+  loadPersonas();
+}
+
+// ── Memory ────────────────────────────────────────────────────────────────
+
+async function loadMemory() {
+  const r = await fetch('/memory?limit=50');
+  const mems = await r.json();
+  document.getElementById('memory-list').innerHTML = mems.map(m => `
+    <div class="mem-item" id="mem-${m.id}">
+      <div style="display:flex;align-items:flex-start;gap:8px;">
+        <div class="mem-content" style="flex:1;">${(m.content||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>
+        <button class="btn btn-danger" onclick="deleteMemory('${m.id}')" style="padding:2px 7px;font-size:10px;flex-shrink:0;" title="Delete this memory">✕</button>
+      </div>
+      <div class="mem-meta">
+        <span>${m.memory_type}</span>
+        <span>agent: ${m.agent_id||'global'}</span>
+        <span>${new Date(m.created_at*1000).toLocaleString()}</span>
+        <span>accessed ${m.access_count}×</span>
+        <button class="btn btn-danger" onclick="deleteMemory('${m.id}')" style="padding:1px 5px;font-size:10px;">✕</button>
+      </div>
+    </div>`).join('') || '<div style="color:var(--text3);padding:20px;">No memories yet.</div>';
+}
+
+async function searchMemory() {
+  const q = document.getElementById('memory-search').value.trim();
+  if (!q) return loadMemory();
+  const r = await fetch('/memory/search', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});
+  const mems = await r.json();
+  document.getElementById('memory-list').innerHTML = mems.map(m => `
+    <div class="mem-item" id="mem-${m.id}">
+      <div style="display:flex;align-items:flex-start;gap:8px;">
+        <div class="mem-content" style="flex:1;">${(m.content||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>
+        <button class="btn btn-danger" onclick="deleteMemory('${m.id}')" style="padding:2px 7px;font-size:10px;flex-shrink:0;" title="Delete this memory">✕</button>
+      </div>
+      <div class="mem-meta"><span>${m.memory_type}</span><span>similarity: ${(m.similarity||0).toFixed(2)}</span></div>
+    </div>`).join('');
+}
+
+async function deleteMemory(id) {
+  await fetch(`/memory/${id}`, {method:'DELETE'});
+  const el = document.getElementById(`mem-${id}`);
+  if (el) el.remove();
+}
+
+async function clearAllMemory() {
+  if (!confirm('Delete ALL long-term memories? This cannot be undone.')) return;
+  const r = await fetch('/memory?limit=200');
+  const mems = await r.json();
+  await Promise.all(mems.map(m => fetch(`/memory/${m.id}`, {method:'DELETE'})));
+  document.getElementById('memory-list').innerHTML =
+    '<div style="color:var(--text3);padding:20px;">All memories cleared.</div>';
+}
+
+// ── GPU ───────────────────────────────────────────────────────────────────
+
+let gpuIntervalId = null;
+
+async function loadGPU() {
+  const r = await fetch('/gpu');
+  const d = await r.json();
+  const el = document.getElementById('gpu-panel');
+  if (!d.has_gpu) {
+    el.innerHTML = `<div style="color:var(--text2);padding:20px;">No NVIDIA GPU detected — running in CPU mode.<br><br><span style="color:var(--text3)">${d.error||''}</span></div>`;
+    return;
+  }
+
+  // Overflow warning block
+  const overflows = d.overflow_models || [];
+  const overflowHtml = overflows.length ? `
+    <div style="background:#2a0a0a;border:1px solid var(--red);border-radius:8px;padding:12px;margin-bottom:14px;">
+      <div style="color:var(--red);font-weight:600;margin-bottom:8px;">⚠️ VRAM Overflow Detected — ${overflows.length} model(s) spilling into system RAM</div>
+      ${overflows.map(m => {
+        const spillPct = Math.round((1 - m.gpu_pct/100) * 100);
+        return `
+        <div style="margin-bottom:8px;font-size:12px;">
+          <div style="color:var(--text);margin-bottom:3px;"><strong>${m.name}</strong></div>
+          <div style="display:flex;gap:12px;color:var(--text2);">
+            <span>🟢 VRAM: ${m.vram_gb} GB (${m.gpu_pct}%)</span>
+            <span>🔴 CPU RAM: ${m.cpu_gb} GB (${spillPct}%)</span>
+            <span>📦 Total: ${m.total_gb} GB</span>
+          </div>
+          <div style="margin-top:4px;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${m.gpu_pct}%;background:var(--green);border-radius:3px;display:inline-block;"></div>
+            <div style="height:100%;width:${100-m.gpu_pct}%;background:var(--red);border-radius:3px;display:inline-block;"></div>
+          </div>
+        </div>`;
+      }).join('')}
+      <div style="margin-top:10px;font-size:11px;color:var(--text3);">
+        Auto-correction runs every 15s. Free VRAM: <strong>${d.free_vram_gb} GB</strong>.
+        ${d.free_vram_gb >= 0.5 ? 'Model will be evicted and reloaded fully on GPU.' : 'VRAM is full — use a smaller/quantized model.'}
+      </div>
+      <button class="btn btn-danger" onclick="fixOverflow()" style="margin-top:8px;font-size:11px;padding:4px 10px;">⚡ Fix Now</button>
+    </div>` : `<div style="color:var(--green);font-size:11px;margin-bottom:10px;">✓ No VRAM overflow — all models fully on GPU</div>`;
+
+  el.innerHTML = overflowHtml + d.gpus.map(g => `
+    <div class="model-card" style="margin-bottom:10px;">
+      <div class="model-name">GPU ${g.index}: ${g.name}</div>
+      <div class="model-stats">
+        <span>🌡 ${g.temperature_c}°C</span>
+        <span>⚡ ${Math.round(g.power_draw_w)}/${Math.round(g.power_limit_w)}W</span>
+        <span>🖥 ${Math.round(g.utilization_pct)}% util</span>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text2);">VRAM: ${g.used_gb}/${g.total_gb} GB used (${Math.round(g.vram_pct)}%)</div>
+      <div class="gpu-bar"><div class="gpu-fill ${g.vram_pct>90?'crit':g.vram_pct>70?'warn':'ok'}" style="width:${g.vram_pct}%"></div></div>
+    </div>`).join('');
+
+  // Update header badge with overflow indicator
+  const badgeEl = document.getElementById('badge-gpu');
+  if (badgeEl && overflows.length) {
+    badgeEl.textContent = `⚠️ VRAM OVERFLOW`;
+    badgeEl.className = 'badge error';
+  }
+
+  if (gpuIntervalId) clearInterval(gpuIntervalId);
+  gpuIntervalId = setInterval(loadGPU, 5000);
+}
+
+async function fixOverflow() {
+  const r = await fetch('/gpu/overflow/fix', {method:'POST'});
+  const d = await r.json();
+  loadGPU();
+}
+
+async function optimizeGPU() {
+  const r = await fetch('/gpu/optimize', {method:'POST'});
+  const d = await r.json();
+  alert(`Evicted: ${(d.evicted||[]).join(', ') || 'none'}\nFree VRAM: ${d.free_vram_gb}GB`);
+  loadGPU();
+}
+
+// ── Full agents tab ────────────────────────────────────────────────────────
+
+async function loadAgentsFull() {
+  const r = await fetch('/agents');
+  const agents = await r.json();
+  document.getElementById('agents-list').innerHTML = `
+    <div class="grid">${agents.map(a => `
+      <div class="card">
+        <div class="card-title"><span class="agent-dot"></span>${a.name}</div>
+        <div class="card-desc">ID: ${a.agent_id}<br>Persona: ${a.persona||'default'}<br>Messages: ${a.message_count}<br>Skills: ${(a.skills||[]).join(', ')||'none'}</div>
+        <div class="card-footer">
+          <button class="btn btn-secondary" onclick="selectAgent('${a.agent_id}','${a.name}');switchTab('chat')" style="font-size:10px;padding:3px 8px;">Chat</button>
+          ${a.agent_id!=='default'?`<button class="btn btn-danger" onclick="deleteAgent('${a.agent_id}')" style="font-size:10px;padding:3px 8px;margin-left:auto;">Delete</button>`:''}
+        </div>
+      </div>`).join('')}
+    </div>`;
+}
+
+async function deleteAgent(id) {
+  if (!confirm('Delete agent?')) return;
+  await fetch(`/agents/${id}`, {method:'DELETE'});
+  loadAgentsFull();
+}
+
+// ── Token stats ────────────────────────────────────────────────────────────
+
+async function loadTokens() {
+  const r = await fetch('/tokens');
+  const d = await r.json();
+  const el = document.getElementById('tokens-panel');
+
+  const uptime = d.uptime_s > 3600
+    ? `${Math.floor(d.uptime_s/3600)}h ${Math.floor((d.uptime_s%3600)/60)}m`
+    : `${Math.floor(d.uptime_s/60)}m ${d.uptime_s%60}s`;
+
+  const totalTokens = (d.total_input || 0) + (d.total_output || 0);
+
+  let html = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px;">
+      <div class="model-card">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Total Messages</div>
+        <div style="font-size:24px;font-weight:700;color:var(--accent2);">${d.total_messages || 0}</div>
+      </div>
+      <div class="model-card">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Total Tokens</div>
+        <div style="font-size:24px;font-weight:700;color:var(--accent2);">${totalTokens.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text3);">↑${(d.total_input||0).toLocaleString()} in · ↓${(d.total_output||0).toLocaleString()} out</div>
+      </div>
+      <div class="model-card">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Session Uptime</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text);">${uptime}</div>
+      </div>
+    </div>`;
+
+  const byModel = d.by_model || {};
+  if (Object.keys(byModel).length) {
+    html += `<h3 style="font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:8px;">By Model</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase;">
+          <th style="text-align:left;padding:5px 8px;">Model</th>
+          <th style="text-align:right;padding:5px 8px;">Messages</th>
+          <th style="text-align:right;padding:5px 8px;">Input tokens</th>
+          <th style="text-align:right;padding:5px 8px;">Output tokens</th>
+          <th style="text-align:right;padding:5px 8px;">Total</th>
+        </tr></thead>
+        <tbody>`;
+    Object.entries(byModel).sort((a,b) => (b[1].messages||0)-(a[1].messages||0)).forEach(([model, stats]) => {
+      const tot = (stats.input||0) + (stats.output||0);
+      html += `<tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 8px;color:var(--text);font-weight:600;">${model}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--text2);">${stats.messages||0}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--text2);">${(stats.input||0).toLocaleString()}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--text2);">${(stats.output||0).toLocaleString()}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--accent2);font-weight:600;">${tot.toLocaleString()}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  } else {
+    html += `<div style="color:var(--text3);font-size:12px;padding:10px 0;">No usage recorded yet. Start chatting.</div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+async function resetTokens() {
+  if (!confirm('Reset all token usage stats?')) return;
+  await fetch('/tokens', {method:'DELETE'});
+  loadTokens();
+}
+
+// ── Communication ─────────────────────────────────────────────────────────
+
+async function loadCommsStatus() {
+  try {
+    const r = await fetch('/comms/status');
+    const d = await r.json();
+    renderCommsStatus(d);
+    // Pre-fill allowed users if already set
+    if (d.allowed_users) {
+      document.getElementById('tg-users-input').value = d.allowed_users;
+    }
+  } catch (e) {
+    document.getElementById('tg-status-detail').textContent = 'Could not reach backend.';
+  }
+}
+
+function renderCommsStatus(d) {
+  const badge = document.getElementById('tg-status-badge');
+  const detail = document.getElementById('tg-status-detail');
+  if (d.running) {
+    badge.textContent = '● Connected';
+    badge.className = 'badge ok';
+  } else {
+    badge.textContent = '○ Offline';
+    badge.className = 'badge err';
+  }
+  const rows = [
+    ['Status',      d.running ? '🟢 Connected' : '🔴 Offline'],
+    ['Bot',         d.bot_username ? '@' + d.bot_username : '—'],
+    ['Token',       d.token_set ? (d.token_masked || '(set)') : '⚠️ Not configured'],
+    ['Allowed users', d.allowed_users || '(open to anyone)'],
+  ];
+  detail.innerHTML = rows.map(([k, v]) =>
+    `<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);">
+       <span style="color:var(--text3);width:110px;flex-shrink:0;">${k}</span>
+       <span style="color:var(--text);">${v}</span>
+     </div>`
+  ).join('');
+}
+
+function toggleTgTokenVis() {
+  const inp = document.getElementById('tg-token-input');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+async function saveTelegramConfig() {
+  const token = document.getElementById('tg-token-input').value.trim();
+  const users = document.getElementById('tg-users-input').value.trim();
+  const msg = document.getElementById('tg-save-msg');
+  msg.style.display = '';
+  msg.style.color = 'var(--text3)';
+  msg.textContent = 'Connecting…';
+  try {
+    const r = await fetch('/comms/telegram', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({token, allowed_users: users}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      msg.style.color = 'var(--green)';
+      msg.textContent = d.bot_username ? `✓ Connected as @${d.bot_username}` : '✓ Connected';
+      document.getElementById('tg-token-input').value = '';
+    } else {
+      msg.style.color = 'var(--red)';
+      msg.textContent = '✗ ' + (d.error || 'Failed to connect');
+    }
+    renderCommsStatus(d);
+  } catch (e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = '✗ ' + e.message;
+  }
+}
+
+async function stopTelegramBot() {
+  const msg = document.getElementById('tg-save-msg');
+  msg.style.display = '';
+  msg.style.color = 'var(--text3)';
+  msg.textContent = 'Stopping…';
+  const r = await fetch('/comms/telegram/stop', {method: 'POST'});
+  const d = await r.json();
+  msg.style.color = 'var(--yellow)';
+  msg.textContent = '○ Bot stopped';
+  renderCommsStatus(d);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+
+loadAgents();
+connectWS();
+loadChatModels();
+loadChatHistory(currentAgentId);
+
+// Close modal on escape or click outside
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeAgentForm();
+});
+document.addEventListener('click', e => {
+  if (agentFormModal && e.target === agentFormModal) closeAgentForm();
+});
+</script>
+</body>
+</html>

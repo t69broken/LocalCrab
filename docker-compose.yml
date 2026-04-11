@@ -1,0 +1,111 @@
+version: "3.9"
+
+# LocalClaw — Local-first OpenClaw-compatible AI agent runtime
+# Port: 18798 (LocalClaw API + UI)
+# Tailscale: set TS_AUTHKEY in .env for automatic VPN mesh access
+
+services:
+
+  # ── Ollama — local model runner ─────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: localclaw-ollama
+    runtime: nvidia
+    ports:
+      - "11434:11434"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_KEEP_ALIVE=5m
+      - OLLAMA_MAX_LOADED_MODELS=2
+      - OLLAMA_NUM_PARALLEL=2
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    networks:
+      - localclaw-net
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── LocalClaw app ───────────────────────────────────────────────────────
+  localclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: localclaw-app
+    restart: unless-stopped
+    ports:
+      - "18798:18798"
+    volumes:
+      - localclaw-data:/app/data
+      - ./src:/app/src:ro            # live-reload friendly in dev
+      - ./frontend:/app/frontend:ro
+      - /home/tyson:/home/tyson      # agent access to host home directory
+    environment:
+      - MEMORY_DB=/app/data/memory/memory.db
+      - SKILLS_DIR=/app/data/skills
+      - PERSONAS_DIR=/app/data/personas
+      - PYTHONPATH=/app/src
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Host SSH access — terminal tool runs commands on the host, not in the container
+      - HOST_SSH_USER=tyson
+      - HOST_SSH_KEY=/home/tyson/.ssh/solar_key
+      # HOST_SSH_HOST auto-detected from gateway; set explicitly if needed
+      # Ralph Wiggum loop config (override defaults)
+      - RALPH_CHECK_IN_INTERVAL=${RALPH_CHECK_IN_INTERVAL:-12}
+      - RALPH_STALL_TIMEOUT=${RALPH_STALL_TIMEOUT:-45}
+      - RALPH_MAX_RETRIES=${RALPH_MAX_RETRIES:-3}
+      - RALPH_TASK_HARD_LIMIT=${RALPH_TASK_HARD_LIMIT:-600}
+    extra_hosts:
+      - "host.docker.internal:10.0.2.1"
+    networks:
+      - localclaw-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18798/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── Tailscale sidecar ───────────────────────────────────────────────────
+  # Set TS_AUTHKEY in .env to enable Tailscale VPN access
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: localclaw-tailscale
+    restart: unless-stopped
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/etc/tailscale/serve.json
+      - TS_HOSTNAME=${TS_HOSTNAME:-localclaw}
+      - TS_EXTRA_ARGS=${TS_EXTRA_ARGS:-}
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./config/tailscale:/etc/tailscale:ro
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    network_mode: "service:localclaw"   # shares network with localclaw
+    depends_on:
+      - localclaw
+    profiles:
+      - tailscale   # opt-in: docker compose --profile tailscale up
+
+volumes:
+  ollama-models:
+    driver: local
+  localclaw-data:
+    driver: local
+  tailscale-state:
+    driver: local
+
+networks:
+  localclaw-net:
+    driver: bridge
