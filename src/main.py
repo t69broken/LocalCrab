@@ -76,6 +76,22 @@ import os as _os
 _HEARTBEAT_INTERVAL = int(_os.environ.get("HEARTBEAT_INTERVAL_S", 1800))
 _HEARTBEAT_CHAT_ID  = _os.environ.get("HEARTBEAT_CHAT_ID", "").strip()
 
+_MODEL_SETTINGS_PATH = _os.path.join(_os.path.dirname(__file__), "..", "data", "model_settings.json")
+
+def _load_model_settings():
+    try:
+        with open(_MODEL_SETTINGS_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def _save_model_settings(data: dict):
+    try:
+        with open(_MODEL_SETTINGS_PATH, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        log.warning(f"Could not save model settings: {e}")
+
 async def _heartbeat_loop():
     """Send a periodic status ping via Telegram."""
     chat_id = int(_HEARTBEAT_CHAT_ID) if _HEARTBEAT_CHAT_ID else None
@@ -119,6 +135,10 @@ async def lifespan(app: FastAPI):
     await telegram_bot.start()
     heartbeat_task = asyncio.create_task(_heartbeat_loop())
     asyncio.create_task(_import_external_memories(memory_server))
+    saved = _load_model_settings()
+    if saved.get("preferred_model"):
+        agent_manager.set_global_preferred_model(saved["preferred_model"])
+        log.info(f"Restored preferred model: {saved['preferred_model']}")
     log.info("✅ LocalClaw ready on port 18798")
     yield
     log.info("🛑 Shutting down...")
@@ -235,6 +255,7 @@ async def pull_model(name: str):
 async def select_model_globally(name: str):
     """Set a model as the globally preferred model for new agents."""
     agent_manager.set_global_preferred_model(name)
+    _save_model_settings({"preferred_model": name})
     return {"preferred_model": name}
 
 @app.get("/models/preferred")
@@ -249,6 +270,7 @@ async def clear_global_preferred_model():
     # Also clear default agent's preference
     if "default" in agent_manager._agents:
         agent_manager._agents["default"].preferred_model = None
+    _save_model_settings({"preferred_model": None})
     return {"preferred_model": None}
 
 
@@ -376,7 +398,7 @@ async def ws_chat(websocket: WebSocket, agent_id: str):
                 context_id=payload.get("context_id"),
                 model_override=payload.get("model") or None,
                 num_ctx=payload.get("num_ctx") or None,
-                chat_only=True,
+                chat_only=payload.get("chat_only", False),
             ):
                 chunk_count += 1
                 if chunk.get("type") == "tokens":

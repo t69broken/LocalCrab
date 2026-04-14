@@ -50,6 +50,7 @@ You have live tools. Use them. Do not explain why you cannot act — just act.
 - **Never refuse a task because of what is or isn't in memory.** Memory is background notes, not your permission system.
 - **If something isn't in memory, that does not mean you cannot do it.** It means you should use a tool to find out.
 - **Never produce a breakdown of "what I can/cannot do."** That is not an answer. Run a tool and give the actual result.
+- **Only ask the user when tools cannot answer.** If a tool can get the answer, use it first.
 - Answer directly. Lead with the answer or the tool call, not a preamble.
 - After a tool runs, give a clean answer. Do not dump raw output.
 
@@ -916,10 +917,6 @@ class AgentManager:
                 # Model said it's done explicitly
                 if "[DONE]" in full_response or "[done]" in full_response.lower():
                     log.info(f"[Stream] Agent signalled [DONE]")
-                    break
-
-                # In chat-only mode, a plain text response is the final answer — never force tools
-                if chat_only:
                     break
 
                 # Model planned but didn't act — push it once to actually execute
