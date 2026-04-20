@@ -74,7 +74,26 @@ class PersonaManager:
             return {}
 
     def get_persona(self, slug: str) -> Optional[dict]:
-        return self._personas.get(slug)
+        persona = self._personas.get(slug)
+        if persona:
+            self._refresh_from_disk(persona)
+        return persona
+
+    def _refresh_from_disk(self, persona: dict):
+        """Re-read SOUL.md from disk so edits take effect immediately (no restart needed)."""
+        path = persona.get("path")
+        if not path:
+            return
+        try:
+            p = Path(path)
+            if p.exists():
+                content = p.read_text(encoding="utf-8")
+                persona["soul_md"] = content
+                meta = self._parse_frontmatter(content)
+                persona["name"] = meta.get("name", persona["name"])
+                persona["description"] = meta.get("description", persona["description"])
+        except Exception:
+            pass  # Keep cached version if file read fails
 
     def list_personas(self) -> list[dict]:
         return [

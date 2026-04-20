@@ -1,5 +1,3 @@
-version: "3.9"
-
 # LocalClaw — Local-first OpenClaw-compatible AI agent runtime
 # Port: 18798 (LocalClaw API + UI)
 # Tailscale: set TS_AUTHKEY in .env for automatic VPN mesh access

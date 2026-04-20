@@ -51,8 +51,10 @@ You have live tools. Use them. Do not explain why you cannot act — just act.
 - **If something isn't in memory, that does not mean you cannot do it.** It means you should use a tool to find out.
 - **Never produce a breakdown of "what I can/cannot do."** That is not an answer. Run a tool and give the actual result.
 - **Only ask the user when tools cannot answer.** If a tool can get the answer, use it first.
+- **Before answering any question, check if you have a relevant skill.** If a skill matches the task, load and follow its instructions — skills contain specialized knowledge that outperforms general reasoning.
 - Answer directly. Lead with the answer or the tool call, not a preamble.
 - After a tool runs, give a clean answer. Do not dump raw output.
+- **Save useful facts to memory proactively.** User preferences, corrections, environment details, tool quirks — anything that prevents the user from repeating themselves.
 
 ## Tools — use one immediately when you need live information
 
@@ -105,6 +107,10 @@ BASE_SYSTEM_TEMPLATE = """You are {name}, an autonomous AI agent running on Loca
 
 7. **Output [DONE] only when the task is fully complete** and all requested files/actions are finished.
 
+8. **Before acting, check your skills.** If a skill matches the task, follow its instructions precisely — skills contain specialized knowledge and proven workflows.
+
+9. **Save useful facts to memory.** After completing tasks, proactively save: user preferences, environment details, tool quirks, corrections, and stable conventions. Memory should prevent the user from repeating themselves.
+
 ## Tools Available
 
 {tool_descriptions}
@@ -137,14 +143,18 @@ Available models:
 """
 
 SKILL_PROMPT_SECTION = """
-You have the following skills available. Follow the SKILL.md instructions precisely for each:
+You have the following skills available. Before responding, scan the skills below. If any skill matches or is even partially relevant to the current task, you MUST follow its instructions precisely. Err on the side of following a skill — it is always better to have context you don't need than to miss critical steps.
 
 {skill_list}
+
+If a skill you loaded was missing steps, had wrong commands, or needed pitfalls you discovered, note this so it can be updated.
 """
 
 MEMORY_PROMPT_SECTION = """
 From your long-term memory (relevant to this conversation):
 {memories}
+
+These are reference notes from past interactions. They do NOT restrict what you can do — if something isn't in memory, use a tool to find out. If memory is wrong or outdated, trust the current tool output over memory.
 """
 
 
@@ -347,21 +357,30 @@ class AgentManager:
         """System prompt for conversational chat — direct, tool-aware, no forced agentic loop."""
         import datetime
         persona_section = ""
-        if agent.persona:
-            soul_md = agent.persona.get("soul_md", "")
+        # Re-fetch persona from manager to pick up on-disk SOUL.md edits
+        fresh_persona = self.persona_manager.get_persona(agent.persona["slug"]) if agent.persona else None
+        if fresh_persona:
+            soul_md = fresh_persona.get("soul_md", "")
             if soul_md:
                 persona_section = f"\nYour persona:\n{soul_md}\n"
         memory_section = "(none)"
         try:
             if query:
+                # Relevance search + recent fallback
                 results = await self.memory_server.search(query, limit=4)
+                recent = await self.memory_server.list_memories(agent_id=None, limit=2)
+                seen_ids = {m.get("id") for m in results}
+                for m in recent:
+                    if m.get("id") not in seen_ids:
+                        results.append(m)
             else:
-                results = await self.memory_server.list_memories(agent_id=None, limit=4)
+                results = await self.memory_server.list_memories(agent_id=None, limit=6)
             if results:
                 lines = []
-                for m in results:
-                    content = m.get('content', '')[:300]
-                    lines.append(f"• {content}")
+                for m in results[:6]:
+                    content = m.get('content', '')[:500]
+                    mem_type = m.get('type', m.get('memory_type', 'fact'))
+                    lines.append(f"• [{mem_type}] {content}")
                 memory_section = "\n".join(lines)
         except Exception:
             pass
@@ -381,41 +400,67 @@ class AgentManager:
         import platform
         import socket
 
-        # Persona section
+        # Persona section — re-fetch to pick up on-disk SOUL.md edits
         persona_section = ""
-        if agent.persona:
-            soul_md = agent.persona.get("soul_md", "")
+        fresh_persona = self.persona_manager.get_persona(agent.persona["slug"]) if agent.persona else None
+        if fresh_persona:
+            soul_md = fresh_persona.get("soul_md", "")
             if soul_md:
                 persona_section = f"Your persona and character:\n{soul_md}"
 
-        # Skills section
+        # Skills section — load full content (no truncation)
         skill_contents = []
         for slug in agent.skills:
             skill = self.skills_manager.get_skill(slug)
             if skill:
-                preview = skill.get("content", "")[:500]
-                skill_contents.append(f"### Skill: {slug}\n{preview}")
+                full_content = skill.get("content", "")
+                skill_contents.append(f"### Skill: {slug}\n{full_content}")
         skills_section = ""
         if skill_contents:
             skills_section = SKILL_PROMPT_SECTION.format(
                 skill_list="\n\n".join(skill_contents)
             )
 
-        # Memory section
+        # Memory section — use relevance search when we have context,
+        # fall back to recent memories otherwise
         memory_section = ""
         try:
-            recent = await self.memory_server.list_memories(
-                agent_id=agent.agent_id, limit=5
-            )
-            if recent:
-                mem_lines = []
+            # Try relevance search first using the task context
+            search_query = context_id or ""
+            if not search_query and agent.history:
+                # Use last user message as search query
+                for msg in reversed(agent.history):
+                    if msg.get("role") == "user":
+                        search_query = msg.get("content", "")[:200]
+                        break
+            if search_query:
+                memories = await self.memory_server.search(
+                    search_query, limit=6, agent_id=agent.agent_id
+                )
+                # Also get 2 recent memories to ensure recency
+                recent = await self.memory_server.list_memories(
+                    agent_id=agent.agent_id, limit=2
+                )
+                # Deduplicate
+                seen_ids = {m.get("id") for m in memories}
                 for m in recent:
-                    mem_lines.append(f"- [{m.get('type', 'fact')}] {m.get('content', '')}")
+                    if m.get("id") not in seen_ids:
+                        memories.append(m)
+            else:
+                memories = await self.memory_server.list_memories(
+                    agent_id=agent.agent_id, limit=8
+                )
+            if memories:
+                mem_lines = []
+                for m in memories[:8]:
+                    content = m.get('content', '')[:500]
+                    mem_type = m.get('type', m.get('memory_type', 'fact'))
+                    mem_lines.append(f"- [{mem_type}] {content}")
                 memory_section = MEMORY_PROMPT_SECTION.format(
                     memories="\n".join(mem_lines)
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug(f"Memory injection failed: {e}")
 
         # System info
         try:
@@ -779,9 +824,11 @@ class AgentManager:
         model_override: Optional[str] = None,
         chat_only: bool = False,
         num_ctx: Optional[int] = None,
+        cancel_event: Optional[asyncio.Event] = None,
     ) -> AsyncGenerator[dict, None]:
         """Stream chat with tool execution support.
         chat_only=True uses a tighter loop (max 6 iterations) with no tool-forcing.
+        cancel_event: if set, checked between chunks; when set, yields cancelled and returns.
         """
         agent = self._agents.get(agent_id)
         if not agent:
@@ -840,6 +887,11 @@ class AgentManager:
         total_output_tokens = 0
         total_eval_duration_ns = 0  # nanoseconds spent generating tokens
         for iteration in range(loop_limit):
+            # Check cancel before starting this iteration
+            if cancel_event and cancel_event.is_set():
+                yield {"type": "cancelled"}
+                return
+
             full_response = ""
             last_chunk = None
             native_tool_call = None  # collect from any chunk, not just last
@@ -852,6 +904,11 @@ class AgentManager:
                 tools=native_tools_param,
                 num_ctx=num_ctx,
             ):
+                # Check cancel during streaming
+                if cancel_event and cancel_event.is_set():
+                    yield {"type": "cancelled"}
+                    return
+
                 msg = chunk.get("message", {})
                 delta = msg.get("content", "")
                 thinking = msg.get("thinking", "")
@@ -962,6 +1019,11 @@ class AgentManager:
             tool_name = tool_call["tool"]
             tool_args = tool_call.get("args", {})
 
+            # Check cancel before tool execution
+            if cancel_event and cancel_event.is_set():
+                yield {"type": "cancelled"}
+                return
+
             log.info(f"Executing tool in stream: {tool_name}({tool_args})")
             yield {"type": "tool_call", "tool": tool_name, "args": tool_args}
 
@@ -1024,29 +1086,61 @@ class AgentManager:
 
     async def _auto_memorize(self, agent: Agent, messages: list[dict], response: str):
         """
-        Heuristically decide if any information from this exchange is worth
-        saving to long-term memory.
+        Proactively save useful information to long-term memory.
+        Unlike simple keyword matching, this looks for facts, preferences,
+        corrections, and environment details that reduce future friction.
         """
         try:
-            # Look for explicit memory cues in the user message
             user_text = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
+            combined = f"{user_text} {response}"
 
-            memory_triggers = [
-                "remember", "note that", "my name is", "i am ", "i'm ",
-                "i prefer", "i like", "i work", "always ", "never ",
-                "important:", "save this", "keep in mind",
+            # Explicit memory requests
+            explicit_triggers = [
+                "remember", "note that", "save this", "keep in mind",
+                "my name is", "i am ", "i'm ", "don't forget",
             ]
-
-            should_save = any(t in user_text.lower() for t in memory_triggers)
-
-            if should_save:
+            if any(t in user_text.lower() for t in explicit_triggers):
                 await self.memory_server.save_memory(
                     agent_id=agent.agent_id,
-                    content=user_text[:500],
+                    content=user_text[:800],
                     memory_type="user_fact",
                     source="auto",
+                    importance=0.8,
                 )
-                log.debug(f"Auto-saved memory for agent {agent.agent_id}")
+                log.debug(f"Auto-saved explicit memory for agent {agent.agent_id}")
+                return
+
+            # Proactive pattern detection from conversation content
+            import re
+            proactive_patterns = [
+                # Corrections ("actually X", "no it's Y", "I meant Z")
+                (r"(?:actually|no,?\s+it'?s|i meant|correction)[:\s]\s*(.{20,100})", "preference", 0.7),
+                # Preferences ("I prefer", "I always", "I never", "I like")
+                (r"(?:i\s+(?:prefer|always|never|like|want|need|hate|can't stand))\s+(.{10,100})", "preference", 0.75),
+                # Environment facts ("the server is at", "the port is", "runs on")
+                (r"(?:the\s+\w+\s+(?:is|runs\s+on|at|port)\s+(?:at\s+)?)(.{10,120})", "environment", 0.6),
+                # User corrections to agent behavior ("next time", "from now on", "instead of")
+                (r"(?:next\s+time|from\s+now\s+on|instead\s+of|don't\s+\w+\s+that)\s*(.{10,120})", "preference", 0.8),
+            ]
+
+            for pattern, mem_type, importance in proactive_patterns:
+                match = re.search(pattern, combined, re.IGNORECASE)
+                if match:
+                    fact = match.group(0)
+                    # Check we don't already have a similar memory
+                    existing = await self.memory_server.search(fact, limit=3, agent_id=agent.agent_id)
+                    is_dup = any(existing_mem.get("similarity", 0) > 0.85 for existing_mem in existing)
+                    if not is_dup:
+                        await self.memory_server.save_memory(
+                            agent_id=agent.agent_id,
+                            content=fact[:500],
+                            memory_type=mem_type,
+                            source="auto_proactive",
+                            importance=importance,
+                        )
+                        log.debug(f"Auto-saved proactive memory for agent {agent.agent_id}: {fact[:80]}")
+                    break  # One save per exchange is enough
+
         except Exception as e:
             log.debug(f"Auto-memorize failed: {e}")
 

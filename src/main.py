@@ -15,7 +15,7 @@ from typing import Any, Optional
 import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -389,23 +389,75 @@ async def ws_chat(websocket: WebSocket, agent_id: str):
         while True:
             raw = await websocket.receive_text()
             payload = json.loads(raw)
+
+            # Handle cancel message (client wants to stop current generation)
+            if payload.get("type") == "cancel":
+                log.info(f"[WS] Cancel received for agent: {agent_id}")
+                continue
+
             log.info(f"[WS] Received message for {agent_id}: {len(payload.get('messages', []))} messages")
+            cancel = asyncio.Event()
             chunk_count = 0
-            async for chunk in agent_manager.stream_chat(
-                agent_id=agent_id,
-                messages=payload.get("messages", []),
-                task_hint=payload.get("task_hint"),
-                context_id=payload.get("context_id"),
-                model_override=payload.get("model") or None,
-                num_ctx=payload.get("num_ctx") or None,
-                chat_only=payload.get("chat_only", False),
-            ):
-                chunk_count += 1
-                if chunk.get("type") == "tokens":
-                    _record_tokens(chunk)
-                await websocket.send_text(json.dumps(chunk))
-            log.info(f"[WS] Streamed {chunk_count} chunks for message")
-            await websocket.send_text(json.dumps({"type": "done"}))
+            stream_done = asyncio.Event()
+
+            async def _stream():
+                nonlocal chunk_count
+                try:
+                    async for chunk in agent_manager.stream_chat(
+                        agent_id=agent_id,
+                        messages=payload.get("messages", []),
+                        task_hint=payload.get("task_hint"),
+                        context_id=payload.get("context_id"),
+                        model_override=payload.get("model") or None,
+                        num_ctx=payload.get("num_ctx") or None,
+                        chat_only=payload.get("chat_only", False),
+                        cancel_event=cancel,
+                    ):
+                        if cancel.is_set():
+                            await websocket.send_text(json.dumps({"type": "cancelled"}))
+                            break
+                        chunk_count += 1
+                        if chunk.get("type") == "tokens":
+                            _record_tokens(chunk)
+                        await websocket.send_text(json.dumps(chunk))
+                except Exception as e:
+                    log.error(f"[WS] Stream error: {e}", exc_info=True)
+                    try:
+                        await websocket.send_text(json.dumps({"type": "error", "message": str(e)}))
+                    except Exception:
+                        pass
+                finally:
+                    if not cancel.is_set():
+                        await websocket.send_text(json.dumps({"type": "done"}))
+                    stream_done.set()
+
+            stream_task = asyncio.create_task(_stream())
+
+            # Listen for cancel messages while streaming
+            try:
+                while not stream_done.is_set():
+                    try:
+                        msg = await asyncio.wait_for(websocket.receive_text(), timeout=0.5)
+                        msg_payload = json.loads(msg)
+                        if msg_payload.get("type") == "cancel":
+                            log.info(f"[WS] Cancelling stream for agent: {agent_id}")
+                            cancel.set()
+                            # Wait for stream to finish cleanly
+                            await asyncio.wait_for(stream_task, timeout=5.0)
+                            break
+                    except asyncio.TimeoutError:
+                        continue
+                    except WebSocketDisconnect:
+                        cancel.set()
+                        stream_task.cancel()
+                        return
+            except WebSocketDisconnect:
+                cancel.set()
+                stream_task.cancel()
+                return
+            except Exception:
+                cancel.set()
+
     except WebSocketDisconnect:
         log.info(f"[WS] Client disconnected from agent: {agent_id}")
 
@@ -654,6 +706,67 @@ async def comms_telegram_start():
     return {**result, **telegram_bot.get_status()}
 
 
+# ── App Update ────────────────────────────────────────────────────────────────
+
+_APP_VERSION_FILE = _os.environ.get(
+    "APP_VERSION_FILE",
+    _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "app_version.json"),
+)
+_APK_FILE = _os.environ.get(
+    "APK_FILE",
+    _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "LocalCrab-app-debug.apk"),
+)
+
+
+def _read_app_version():
+    """Read app version info from app_version.json, or infer from APK file."""
+    if _os.path.exists(_APP_VERSION_FILE):
+        try:
+            with open(_APP_VERSION_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    # Fallback: check if APK exists and return basic info
+    if _os.path.exists(_APK_FILE):
+        import time as _t
+        mtime = _os.path.getmtime(_APK_FILE)
+        size = _os.path.getsize(_APK_FILE)
+        return {
+            "versionCode": 1,
+            "versionName": "1.0.0",
+            "changelog": "Bug fixes and improvements",
+            "updated": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime(mtime)),
+            "size": size,
+        }
+    return None
+
+
+@app.get("/app/update")
+async def app_update_check(current_version_code: int = 0):
+    """Check for app updates. Returns latest version info if newer than current."""
+    info = _read_app_version()
+    if info is None:
+        raise HTTPException(status_code=404, detail="No APK available")
+    if info.get("versionCode", 0) > current_version_code:
+        info["downloadUrl"] = "/app/download"
+        info["updateAvailable"] = True
+    else:
+        info["updateAvailable"] = False
+    return info
+
+
+@app.get("/app/download")
+async def app_download():
+    """Download the latest APK file."""
+    if not _os.path.exists(_APK_FILE):
+        raise HTTPException(status_code=404, detail="APK file not found")
+    return FileResponse(
+        _APK_FILE,
+        media_type="application/vnd.android.package-archive",
+        filename="LocalCrab-app-debug.apk",
+    )
+
+
 # ── Frontend ──────────────────────────────────────────────────────────────────
 
 _FRONTEND_DIR = _os.environ.get(
@@ -670,9 +783,19 @@ async def root():
         return "<h1>LocalClaw</h1><p>API docs: <a href='/docs'>/docs</a></p>"
 
 try:
-    app.mount("/static", StaticFiles(directory=_os.path.join(_FRONTEND_DIR, "static")), name="static")
+    app.mount("/static", StaticFiles(directory=_os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "frontend")), name="static")
 except Exception:
     pass
+
+# ── Improved page ──
+@app.get("/improved")
+async def improved_page():
+    """Serve the improvement monitor page."""
+    try:
+        with open(_os.path.join(_os.path.dirname(__file__), "../improved.html")) as f:
+            return HTMLResponse(f.read())
+    except FileNotFoundError:
+        return HTMLResponse('''<h1>Noimproved page Yet</h1><p>Scheduled for next release.</p>''')
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=18798, reload=False,

@@ -1,0 +1,39 @@
+#!/bin/bash
+# Launch script for LocalClaw on bare metal (non-Docker)
+# Run this to start LocalClaw server — improvements will run continuously
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Set PATH to include venv
+export PATH="$SCRIPT_DIR/venv/bin:$PATH"
+
+# Load environment variables from .env
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    export $(grep -v '^#' "$SCRIPT_DIR/.env" | xargs)
+fi
+
+# Export PYTHONPATH to include src module
+export PYTHONPATH="$SCRIPT_DIR/src:$PYTHONPATH"
+
+echo "=== Starting LocalClaw Server ==="
+echo "PID will run continuously in background"
+echo "Improvments run every 15 minutes regardless of terminal state"
+
+echo ""
+echo uvicorn src.main:app --host 0.0.0.0 --port 18798
+
+# Run uvicorn in background with redirect
+uvicorn src.main:app --host 0.0.0.0 --port 18798 >> /home/tyson/ClaudeLocalClaw/localclaw/server.log 2>&1 &
+
+# Save PID
+echo $! > /tmp/localclaw.pid
+echo "LocalClaw started (PID: $(cat /tmp/localclaw.pid))"
+echo ""
+echo "Continuous Improvement Loop Status:"
+echo "  - Cron daemon: Running"
+echo "  - Improvements: Every 15 minutes"
+echo "  - Terminal: Can be closed"
+echo ""

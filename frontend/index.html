@@ -36,6 +36,10 @@
   /* Layout */
   .workspace { flex: 1; display: flex; overflow: hidden; }
   .panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  
+  /* Improved page link */
+  .improved-link { background: var(--bg3); border: 1px solid var(--accent); border-radius: 5px; padding: 6px 10px; color: var(--accent2); font-size: 11px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
+  .improved-link:hover { background: var(--accent); color: #fff; }
   .panel-header { padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg2); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .panel-header h2 { font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
   .panel-body { flex: 1; overflow-y: auto; padding: 12px; }
@@ -43,11 +47,11 @@
   /* Split view */
   .split { display: flex; height: 100%; }
   .split-left { width: 340px; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
-  .split-right { flex: 1; display: flex; flex-direction: column; }
+  .split-right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
   /* Chat */
-  .chat-messages { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-  .msg { max-width: 85%; padding: 10px 13px; border-radius: 8px; line-height: 1.5; }
+  .chat-messages { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; display: flex; flex-direction: column; gap: 10px; max-width: 100%; }
+  .msg { max-width: 85%; padding: 10px 13px; border-radius: 8px; line-height: 1.5; overflow-wrap: break-word; word-break: break-word; }
   .msg.user { background: #1e2535; border: 1px solid #2a3350; align-self: flex-end; color: var(--text); }
   .msg.assistant { background: var(--bg3); border: 1px solid var(--border); align-self: flex-start; color: var(--text); }
   .msg.system { background: #1a1520; border: 1px solid #2a1f35; align-self: center; color: var(--text2); font-size: 11px; text-align: center; max-width: 95%; }
@@ -58,7 +62,7 @@
   .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
   .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
   @keyframes thinking-bounce { 0%,80%,100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
-  .msg pre { background: #0a0c12; border-radius: 4px; padding: 8px; margin-top: 6px; overflow-x: auto; font-size: 12px; }
+  .msg pre { background: #0a0c12; border-radius: 4px; padding: 8px; margin-top: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px; }
 
   /* Chat input */
   .chat-input-area { border-top: 1px solid var(--border); padding: 10px 12px; display: flex; gap: 8px; background: var(--bg2); flex-shrink: 0; }
@@ -71,6 +75,8 @@
   .btn-secondary:hover { color: var(--text); border-color: var(--accent); }
   .btn-danger { background: #2d1515; color: var(--red); border: 1px solid #4a2020; }
   .btn-danger:hover { background: #3d1a1a; }
+  .btn-stop { background: #2d1515; color: var(--red); border: 1px solid #4a2020; font-weight: 700; }
+  .btn-stop:hover { background: #4a2020; }
   .btn-ralph { background: #1e0f35; color: var(--ralph2); border: 1px solid #3d1f60; }
   .btn-ralph:hover { background: #2a1545; }
 
@@ -169,6 +175,7 @@
 <header>
   <div class="logo">🦀 Local<span>Crab</span></div>
   <div style="font-size:11px; color:var(--text3);">🦀 local • private • fast</div>
+  <a href="/improved" class="improved-link">🔧 View Improvements</a>
   <div class="header-badges">
     <span class="badge" id="badge-ollama">Ollama ···</span>
     <span class="badge" id="badge-gpu">GPU ···</span>
@@ -219,7 +226,8 @@
       <div class="chat-input-area">
         <textarea id="chat-input" rows="2" placeholder="Message… (Shift+Enter for new line, Enter to send)"></textarea>
         <div style="display:flex;flex-direction:column;gap:5px;">
-          <button class="btn btn-primary" onclick="sendChat()">Send</button>
+          <button class="btn btn-primary" id="send-btn" onclick="sendChat()">Send</button>
+          <button class="btn btn-stop hidden" id="stop-btn" onclick="stopGeneration()">■ Stop</button>
           <button class="btn btn-ralph" onclick="sendAsTask()" title="Send as a Ralph-loop task">🔄 Task</button>
         </div>
       </div>
@@ -525,6 +533,12 @@ function connectWS() {
     } else if (d.type === 'done') {
       clearThinking();
       finaliseAssistantMsg();
+      setStreamingUI(false);
+    } else if (d.type === 'cancelled') {
+      clearThinking();
+      finaliseAssistantMsg();
+      setStreamingUI(false);
+      addMessage('system', '⏹ Generation stopped.', 'Stopped');
     } else if (d.type === 'error') {
       clearThinking();
       addMessage('system', `✗ Error: ${d.message || d.error}`, 'Error');
@@ -575,9 +589,10 @@ function finaliseAssistantMsg() {
   if (assistantBuf) {
     const text = assistantBuf.textContent;
     const ts = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     assistantBuf.innerHTML =
       `<div class="msg-meta">${ts}</div>` +
-      text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+      escaped.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
         `<pre><code>${code.replace(/</g,'&lt;')}</code></pre>`)
       .replace(/\n/g, '<br>');
     assistantBuf = null;
@@ -636,8 +651,7 @@ function addMessage(role, content, meta='') {
   const now = new Date();
   const ts = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
   const metaLine = [meta, ts].filter(Boolean).join(' · ');
-  div.innerHTML = `<div class="msg-meta">${metaLine}</div>`;
-  div.innerHTML += content.replace(/</g,'&lt;').replace(/\n/g,'<br>');
+  div.innerHTML = `<div class="msg-meta">${metaLine}</div>` + content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
   messages.appendChild(div);
   messages.scrollTop = messages.scrollHeight;
 }
@@ -657,6 +671,7 @@ function sendChat() {
   input.value = '';
   addMessage('user', text);
   showThinking();
+  setStreamingUI(true);
 
   if (ws && ws.readyState === 1) {
     const payload = {
@@ -667,8 +682,30 @@ function sendChat() {
     ws.send(JSON.stringify(payload));
   } else {
     clearThinking();
+    setStreamingUI(false);
     addMessage('system', '⚠ Reconnecting…', 'Connection');
     connectWS();
+  }
+}
+
+function stopGeneration() {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({type: 'cancel'}));
+  }
+  clearThinking();
+  finaliseAssistantMsg();
+  setStreamingUI(false);
+}
+
+function setStreamingUI(streaming) {
+  const sendBtn = document.getElementById('send-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  if (streaming) {
+    sendBtn.classList.add('hidden');
+    stopBtn.classList.remove('hidden');
+  } else {
+    sendBtn.classList.remove('hidden');
+    stopBtn.classList.add('hidden');
   }
 }
 
@@ -805,9 +842,22 @@ function showNewAgentForm() {
   loadPersonasInForm();
 }
 
-function closeAgentForm() {
-  if (agentFormModal) agentFormModal.style.display = 'none';
+function clearAgentHistory() {
+  alert('All history removed');
 }
+
+// ── Footer ──
+const footer = document.createElement('div');
+footer.style.cssText = 'background:var(--bg2);border-top:1px solid var(--border);padding:8px 16px;font-size:11px;color:var(--text3);display:flex;justify-content:space-between;align-items:center;';
+footer.innerHTML = `
+  <div>LocalCrab v1.0.0 — ${new Date().toLocaleDateString()}</div>
+  <div>
+    <a href="/improved" class="improved-link" style="margin-right:12px;">🔧 View Improvements</a>  
+    <a href="/docs" style="color:var(--text3);font-size:11px;cursor:pointer;">📖 API Docs</a>
+    <a href="/" style="color:var(--text);font-size:11px;cursor:pointer;">🏠 Home</a>
+  </div>
+`;
+document.body.appendChild(footer);
 
 async function loadPersonasInForm() {
   const r = await fetch('/personas');

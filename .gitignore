@@ -20,13 +20,21 @@ localclaw.env
 # Backups
 *.bak
 
-# Stray directories
-{src/
-
 # SQLite
 *.db
 *.db-shm
 *.db-wal
+
+# Logs
+*.log
+
+# APKs (build artifacts)
+*.apk
+
+# Temp/fix scripts
+cleanup_zombies.sh
+fix_duplicate_processes.sh
+fix_permissions.sh
 
 # Editor
 .vscode/

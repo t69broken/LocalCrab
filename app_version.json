@@ -1,0 +1,7 @@
+{
+    "versionCode": 7,
+    "versionName": "1.4.1",
+    "changelog": "Fixed OTA update — Retrofit client now rebuilds on connection change. Added loading spinner for update checks. Better error visibility.",
+    "updated": "2026-04-16T20:45:00Z",
+    "size": 17132911
+}

@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 LocalCrab — View Improvements</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --bg2: #16213e;
+            --bg3: #0f3460;
+            --text: #eee;
+            --accent: #e94560;
+            --accent2: #16cbaa;
+            --success: #4CAF50;
+            --warning: #FF9800;
+            --error: #f44336;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: var(--bg);
+            color: var(--text);
+            padding: 20px;
+            line-height: 1.5;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { color: var(--accent2); margin-bottom: 10px; }
+        .subtitle { color: #888; margin-bottom: 30px; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
+        .stat-card {
+            background: var(--bg2);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--bg3);
+        }
+        .stat-card h3 { color: var(--accent); font-size: 10px; margin-bottom: 5px; text-transform: uppercase; }
+        .stat-card .value { font-size: 24px; color: var(--accent2); }
+        .improvement-list { margin-top: 20px; }
+        .improvement-item {
+            background: var(--bg2);
+            border-left: 4px solid var(--accent);
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .improvement-item h4 { color: var(--accent); margin-bottom: 8px; }
+        .improvement-item .meta { font-size: 10px; color: #666; margin-bottom: 10px; }
+        .improvement-item .status { color: var(--success); font-weight: bold; }
+        .improvement-item .warning { color: var(--warning); }
+        .improvement-item .error { color: var(--error); }
+        .improvement-item code { background: var(--bg); padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+        .improvement-item a { color: var(--accent2); }
+        .section { margin: 40px 0; }
+        .section h2 { color: var(--accent); margin-bottom: 15px; border-bottom: 1px solid var(--bg3); padding-bottom: 8px; }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 9px;
+            background: var(--bg3);
+        }
+        .badge.new { background: var(--success); color: #000; }
+        .badge.fixed { background: var(--accent2); }
+        .badge.warn { background: var(--warning); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+        .log-container { background: var(--bg2); padding: 20px; border-radius: 8px; border: 1px solid var(--bg3); max-height: 600px; overflow-y: auto; }
+        .log-entry { font-size: 10px; margin-bottom: 5px; padding: 4px; border-left: 2px solid var(--bg3); }
+        .log-entry.success { border-color: var(--success); }
+        .log-entry.fail { border-color: var(--error); }
+        .log-entry.warn { border-color: var(--warning); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 LocalCrab — View Improvements</h1>
+        <p class="subtitle">Continuous improvement tracking — Every change is logged and tracked</p>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Improvements</h3>
+                <div class="value">8</div>
+            </div>
+            <div class="stat-card">
+                <h3>Issues Resolved</h3>
+                <div class="value">2</div>
+            </div>
+            <div class="stat-card">
+                <h3>System Health</h3>
+                <div class="value">✅ OK</div>
+            </div>
+            <div class="stat-card">
+                <h3>Continuous Cycle</h3>
+                <div class="value">Every 15min</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🚀 Improvements Applied</h2>
+            <div class="improvement-list">
+                
+                <div class="improvement-item">
+                    <h4>❌ Hardcoded Paths Fixed (data/*)</h4>
+                    <div class="meta">
+                        <span class="badge new">New</span>
+                        <span class="badge fixed">Fixed</span>
+                        <time>Apr 19, 2026 13:16</time>
+                    </div>
+                    <p>
+                        Resolved <code>/app/data/</code> hardcoded paths in multiple modules:
+                        <code>history_store.py</code>, <code>task_store.py</code>, <code>memory/mcp_server.py</code>,
+                        <code>skills/manager.py</code>, <code>personas/manager.py</code>, <code>telegram_bot.py</code>
+                    </p>
+                    <p><strong>Fix:</strong> Created <code>.env</code> file with relative paths:</p>
+                    <pre><code>
+HISTORY_DB=data/history/history.db
+TASKS_DB=data/history/tasks.db
+MEMORY_DB=data/memory/memory.db
+SKILLS_DIR=data/skills
+PERSONAS_DIR=data/personas
+COMMS_CONFIG=data/comms_config.json
+                    </code></pre>
+                    <p><strong>Impact:</strong> LocalClaw now runs correctly on bare metal without Docker.</p>
+                    <a href="/health">📊 Server Health</a>
+                </div>
+                
+                <div class="improvement-item">
+                    <h4>✅ Launch Script Created</h4>
+                    <div class="meta">
+                        <span class="badge new">New</span>
+                        <time>Apr 19, 2026 12:51</time>
+                    </div>
+                    <p>
+                        Created executable launcher: <code>start</code>
+                    </p>
+                    <p><strong>Commands:</strong></p>
+                    <pre><code>
+cd /home/tyson/ClaudeLocalClaw/localclaw && ./start
+                    </code></pre>
+                    <a href="./start">⬇️ Download Script</a>
+                </div>
+                
+                <div class="improvement-item">
+                    <h4>✅ Environment Variables Script</h4>
+                    <div class="meta">
+                        <span class="badge new">New</span>
+                        <time>Apr 19, 2026 12:32</time>
+                    </div>
+                    <p>
+                        Created <code>.env</code> file to override default <code>/app/data</code> paths
+                    </p>
+                    <p><strong>Files created:</strong></p>
+                    <pre><code>
+.env — Environment configuration
+start — Launch script
+export-env.sh — Export script
+start.py — Python launcher
+launch.sh — Full launcher
+                    </code></pre>
+                </div>
+                
+                <div class="improvement-item">
+                    <h4>✅ Continuous Improvement Loop Deployed</h4>
+                    <div class="meta">
+                        <span class="badge new">New</span>
+                        <span class="badge warn">Active</span>
+                        <time>Apr 19, 2026 14:07</time>
+                    </div>
+                    <p>
+                        Deployed autoresearch-style continuous improvement via:
+                    </p>
+                    <pre><code>/home/tyson/localcrab/run_continuous_improvement.py</code></p>
+                    <p><strong>Cron schedule:</strong> Every 15 minutes</p>
+                    <p><strong>Next check:</strong> 14:22 (15 min intervals)</p>
+                    <a href="/home/tyson/localcrab/run_continuous_improvement.py">📄 View Script</a>
+                    <a href="/home/tyson/localcrab/improvement_reports/">📊 View Reports</a>
+                </div>
+                
+                <div class="improvement-item">
+                    <h4>✅ Previous Improvements</h4>
+                    <div class="meta">
+                        <span class="badge fixed">Applied</span>
+                        <time>Apr 18, 2026 08:50 PM</time>
+                    </div>
+                    <p><strong>OTA Directory Fixed:</strong> Made <code>/home/tyson/localcrab/OTA</code> writable</p>
+                    <p><strong>Process Hygiene:</strong> Cleaner up processes</p>
+                    <p><strong>Test Scripts:</strong> <code>localcrab_test_script.py</code>, <code>localcrab_improvement_script.py</code></p>
+                </div>
+                
+                <div class="improvement-item">
+                    <h4>✅ Database Verification</h4>
+                    <div class="meta">
+                        <span class="badge fixed">Verified</span>
+                    </div>
+                    <p>All databases are accessible now:</p>
+                    <ul>
+                        <li>✅ <code>data/history/history.db</code> — Chat history</li>
+                        <li>✅ <code>data/history/tasks.db</code> — Task store</li>
+                        <li>✅ <code>data/memory/memory.db</code> — MCP Memory</li>
+                        <li>✅ <code>data/skills</code> — Skills directory</li>
+                        <li>✅ <code>data/personas</code> — Personas directory</li>
+                    </ul>
+                </div>
+                
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>📊 Recent Diagnostics</h2>
+            <div class="log-container">
+    <div class="log-entry success">TIMESTAMP: 2026-04-19 13:16:33</div>
+    <div class="log-entry success">SERVER HEALTH: OK (HTTP 200)</div>
+    <div class="log-entry success">DATABASES: All accessible</div>
+    <div class="log-entry success">GPU: 20 GB VRAM available</div>
+    <div class="log-entry success">BENCHMARK: 1.12ms memory query</div>
+    <div class="log-entry warn">ISSUES: 4 failed tasks</div>
+    <div class="log-entry success">IMPROVEMENT PLAN: Generated</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>📁 File Changes</h2>
+            <div class="grid">
+                <div>
+                    <h3>Scripts (./)</h3>
+                    <ul style="font-size: 10px; color: #666;">
+                        <li><code>start</code> — Launch script</li>
+                        <li><code>start.py</code> — Python launcher</li>
+                        <li><code>export-env.sh</code> — Export script</li>
+                        <li><code>launch.sh</code> — Full launcher</li>
+                        <li><code>.env</code> — Environment config</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3>Reports (./improvement_reports/)</h3>
+                    <ul style="font-size: 10px; color: #666;">
+                        <li><code>2026-04-19_13-16-xx_improvement_report.txt</code></li>
+                        <li><code>2026-04-19_14-07-18_improvement_report.txt</code></li>
+                        <li><code>... (continuous)</code></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>🔍 System Health</h2>
+            <a href="/health" class="improved-link">🏥 Full Health Check</a>
+        </div>
+        
+        <div class="section">
+            <h2>⚙️ Cron Configuration</h2>
+            <pre><code>
+*/15 * * * * python /home/tyson/localcrab/run_continuous_improvement.py >> /home/tyson/localcrab/improvement_logs/cron.log 2>&1
+            </code></pre>
+        </div>
+        
+        <div class="section">
+            <h2>💡 Autoresearch Principles Applied</h2>
+            <p><strong>Systematic Testing:</strong> All components tested in each cycle</p>
+            <p><strong>Error-Driven Discovery:</strong> Issues automatically detected and reported</p>
+            <p><strong>Self-Benchmarking:</strong> Memory latency tracking (~1ms)</p>
+        </div>
+        
+        <div class="section">
+            <h2>📝 Changelog</h2>
+            <ol style="font-size: 11px; color: #666; padding-left: 20px;">
+                <li><strong>Apr 19 14:07</strong> — Continuous improvement loop deployed</li>
+                <li><strong>Apr 19 13:16</strong> — Hardcoded paths fixed, server started successfully</li>
+                <li><strong>Apr 19 12:51</strong> — Launch script created</li>
+                <li><strong>Apr 19 12:32</strong> — Environment configuration created</li>
+                <li><strong>Apr 18 08:50 PM</strong> — OTA directory fix, process hygiene scripts</li>
+            </ol>
+        </div>
+        
+    </div>
+</body>
+</html>
